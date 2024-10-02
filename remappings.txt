@@ -2,5 +2,5 @@
 @uniswap/v3-periphery/=lib/v3-periphery/
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
-uni-v3-lib/=lib/uni-v3-lib/
+uni-v3-lib/=lib/uni-v3-lib.git/
 solady/=lib/solady/
