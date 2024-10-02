@@ -126,15 +126,15 @@ contract FarmlyPositionManager is ERC20, ILogAutomation, IERC721Receiver {
         token0.transferFrom(msg.sender, address(this), amount0);
         token1.transferFrom(msg.sender, address(this), amount1);
         (int256 token0Price, int256 token1Price) = getLatestPrices();
-        int256 userDepositUSD = ((amount0 * token0Price) / 1e18) +
-            ((amount1 * token1Price) / 1e6);
+        int256 userDepositUSD = ((int256(amount0) * token0Price) / 1e18) +
+            ((int256(amount1) * token1Price) / 1e6);
 
         _mint(
             msg.sender,
             totalSupply() == 0
-                ? userDepositUSD
+                ? uint256(userDepositUSD)
                 : FarmlyFullMath.mulDiv(
-                    userDepositUSD,
+                    uint256(userDepositUSD),
                     totalSupply(),
                     totalUSDValue()
                 )
@@ -183,10 +183,8 @@ contract FarmlyPositionManager is ERC20, ILogAutomation, IERC721Receiver {
         view
         returns (int256 token0Price, int256 token1Price)
     {
-        (, int256 token0Answer, , , ) = token0DataFeed.latestRoundData();
-        (, int256 token1Answer, , , ) = token1DataFeed.latestRoundData();
-
-        return (token0Answer * 1e18) / token1Answer;
+        (, token0Price, , , ) = token0DataFeed.latestRoundData();
+        (, token1Price, , , ) = token1DataFeed.latestRoundData();
     }
 
     function getAmountsForAdd(
