@@ -3,4 +3,4 @@
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
 uni-v3-lib/=lib/uni-v3-lib/
-solady/=lib/uni-v3-lib/node_modules/solady/
+solady/=lib/solady/

@@ -22,6 +22,3 @@
 [submodule "lib/uni-v3-lib"]
 	path = lib/uni-v3-lib
 	url = https://github.com/Aperture-Finance/uni-v3-lib
-[submodule "lib/solady"]
-	path = lib/solady
-	url = https://github.com/vectorized/solady

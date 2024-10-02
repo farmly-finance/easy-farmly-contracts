@@ -7,6 +7,7 @@ import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 import {FarmlyZapV3, V3PoolCallee} from "./libraries/FarmlyZapV3.sol";
