@@ -1,7 +1,7 @@
 pragma solidity >=0.5.0;
-import "@aperture_finance/uni-v3-lib/src/SwapMath.sol";
-import "@aperture_finance/uni-v3-lib/src/TickBitmap.sol";
-import "@aperture_finance/uni-v3-lib/src/TickMath.sol";
+import "uni-v3-lib/src/SwapMath.sol";
+import "uni-v3-lib/src/TickBitmap.sol";
+import "uni-v3-lib/src/TickMath.sol";
 
 library FarmlyZapV3 {
     using TickMath for int24;
