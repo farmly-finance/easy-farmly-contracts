@@ -25,3 +25,6 @@
 [submodule "lib/uni-v3-lib.git"]
 	path = lib/uni-v3-lib.git
 	url = https://github.com/Aperture-Finance/uni-v3-lib.git
+[submodule "lib/solmate"]
+	path = lib/solmate
+	url = https://github.com/transmissions11/solmate
