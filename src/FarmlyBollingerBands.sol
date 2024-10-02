@@ -1,24 +1,36 @@
 pragma solidity ^0.8.13;
 
 import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 
-contract FarmlyBollingerBands is AutomationCompatibleInterface {
-    AggregatorV3Interface public dataFeed =
-        AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306);
+contract FarmlyBollingerBands is AutomationCompatibleInterface, Ownable {
+    AggregatorV3Interface public token0DataFeed =
+        AggregatorV3Interface(0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612);
+
+    AggregatorV3Interface public token1DataFeed =
+        AggregatorV3Interface(0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3);
 
     uint16 public ma = 20;
     int16 public multiplier = 3;
     uint256 public period = 1 hours;
-    int256[] public answers;
+    int256[] public prices;
+    uint256 public pricesLength;
     uint256 public nextPeriodStartTimestamp;
     int256 public latestUpperBand;
     int256 public latestSma;
     int256 public latestLowerBand;
 
+    address public forwarderAddress;
+
+    modifier onlyForwarder() {
+        require(msg.sender == forwarderAddress, "NOT FORWARDER");
+        _;
+    }
+
     event NewBand(
-        int256 answer,
+        int256 price,
         int256 upperBand,
         int256 sma,
         int256 lowerBand,
@@ -26,7 +38,7 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface {
     );
 
     constructor() {
-        nextPeriodStartTimestamp = 1727636400;
+        nextPeriodStartTimestamp = 1727895600;
     }
 
     function checkUpkeep(
@@ -38,17 +50,21 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         if (block.timestamp >= nextPeriodStartTimestamp) {
-            (, int256 answer, , , ) = dataFeed.latestRoundData();
-            performData = abi.encode(answer);
+            (, int256 token0Answer, , , ) = token0DataFeed.latestRoundData();
+            (, int256 token1Answer, , , ) = token1DataFeed.latestRoundData();
+            performData = abi.encode((token0Answer * 1e18) / token1Answer);
             upkeepNeeded = true;
         }
         // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
     }
 
-    function performUpkeep(bytes calldata performData) external override {
-        int256 answer = abi.decode(performData, (int256));
-        answers.push(answer);
-        if (answers.length >= ma) {
+    function performUpkeep(
+        bytes calldata performData
+    ) external override onlyForwarder {
+        int256 price = abi.decode(performData, (int256));
+        prices.push(price);
+        pricesLength++;
+        if (prices.length >= ma) {
             (
                 int256 upperBand,
                 int256 sma,
@@ -60,7 +76,7 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface {
             latestLowerBand = lowerBand;
 
             emit NewBand(
-                answer,
+                price,
                 upperBand,
                 sma,
                 lowerBand,
@@ -73,16 +89,16 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface {
 
     function calculateSMA() internal view returns (int256) {
         int256 sum = 0;
-        for (uint256 i = answers.length - ma; i < answers.length; i++) {
-            sum += answers[i];
+        for (uint256 i = prices.length - ma; i < prices.length; i++) {
+            sum += prices[i];
         }
         return sum / int16(ma);
     }
 
     function calculateStdDev(int256 sma) internal view returns (int256) {
         uint256 variance = 0;
-        for (uint256 i = answers.length - ma; i < answers.length; i++) {
-            int256 diff = int256(answers[i]) - sma;
+        for (uint256 i = prices.length - ma; i < prices.length; i++) {
+            int256 diff = int256(prices[i]) - sma;
             variance += uint256(diff * diff);
         }
         return int256(FarmlyFullMath.sqrt(variance / ma));
@@ -98,5 +114,9 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface {
 
         upperBand = sma + (multiplier * stdDev);
         lowerBand = sma - (multiplier * stdDev);
+    }
+
+    function setForwarder(address _forwarderAddress) public onlyOwner {
+        forwarderAddress = _forwarderAddress;
     }
 }
