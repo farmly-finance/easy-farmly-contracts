@@ -76,7 +76,7 @@ contract FarmlyPositionManager is ERC20, ILogAutomation, IERC721Receiver {
         uint160 sqrtPriceX96;
     }
 
-    constructor() public {
+    constructor() ERC20("Test Token", "TSTSY") {
         token0 = IERC20Metadata(pool.token0());
         token1 = IERC20Metadata(pool.token1());
     }
@@ -194,7 +194,6 @@ contract FarmlyPositionManager is ERC20, ILogAutomation, IERC721Receiver {
     )
         public
         view
-        override
         returns (
             SwapInfo memory swapInfo,
             uint256 amount0Add,
