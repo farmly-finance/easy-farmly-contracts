@@ -2,6 +2,7 @@ pragma solidity ^0.8.13;
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -11,6 +12,7 @@ import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfa
 
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 import {FarmlyZapV3, V3PoolCallee} from "./libraries/FarmlyZapV3.sol";
+import {SqrtPriceX96} from "./libraries/SqrtPriceX96.sol";
 
 struct Log {
     uint256 index; // Index of the log in the block
@@ -58,6 +60,7 @@ contract FarmlyPositionManager is ERC20, ILogAutomation, IERC721Receiver {
     int256 public latestUpperPrice;
     int256 public latestLowerPrice;
     uint256 public latestTimestamp;
+    uint256 public latestTokenId;
 
     int256 public positonThreshold = 500; // %1 = 1000
 
@@ -139,6 +142,47 @@ contract FarmlyPositionManager is ERC20, ILogAutomation, IERC721Receiver {
                     totalUSDValue()
                 )
         );
+
+        PositionInfo memory positionInfo = PositionInfo(
+            TickMath.getTickAtSqrtRatio(encodeSqrtPriceX96(latestLowerPrice)),
+            TickMath.getTickAtSqrtRatio(encodeSqrtPriceX96(latestUpperPrice)),
+            amount0,
+            amount1
+        );
+
+        (
+            SwapInfo memory swapInfo,
+            uint256 amount0Add,
+            uint256 amount1Add
+        ) = getAmountsForAdd(positionInfo);
+
+        token0.approve(address(nonfungiblePositionManager), amount0Add);
+        token1.approve(address(nonfungiblePositionManager), amount1Add);
+
+        if (latestTokenId == 0) {
+            INonfungiblePositionManager.MintParams
+                memory params = INonfungiblePositionManager.MintParams({
+                    token0: address(token0),
+                    token1: address(token1),
+                    fee: poolFee,
+                    tickLower: 0,
+                    tickUpper: 0,
+                    amount0Desired: amount0Add,
+                    amount1Desired: amount1Add,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    recipient: address(this),
+                    deadline: block.timestamp
+                });
+
+            (uint256 tokenId, , , ) = nonfungiblePositionManager.mint(params);
+
+            latestTokenId = tokenId;
+
+            /* SIFIRDAN POZ OLUŞTUR*/
+        } else {
+            /* VAR OLANA EKLE */
+        }
 
         /* 
         userDepositUSD * totalSupply() / totalUSDValue
