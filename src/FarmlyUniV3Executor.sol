@@ -133,6 +133,10 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         (amount0, amount1) = _collect();
     }
 
+    function collectFees() internal returns (uint256 amount0, uint256 amount1) {
+        (amount0, amount1) = _collect();
+    }
+
     function swapExactInput(
         address tokenIn,
         address tokenOut,

@@ -21,30 +21,6 @@ contract FarmlyPositionManagerTest is Test {
         );
     }
 
-    function testData() public {
-        (
-            int256 upperBand,
-            int256 lowerBand,
-            uint256 timestamp,
-            bytes memory dataa
-        ) = farmlyPositionManager.decodeData();
-
-        console.log(upperBand);
-        console.log(lowerBand);
-        console.log(timestamp);
-
-        farmlyPositionManager.token0().approve(
-            address(farmlyPositionManager),
-            testAmount0
-        );
-        farmlyPositionManager.token1().approve(
-            address(farmlyPositionManager),
-            testAmount1
-        );
-        farmlyPositionManager.deposit(testAmount0, testAmount1);
-        farmlyPositionManager.performUpkeep(dataa);
-    }
-
     function test_Deposit() public {
         console.log(
             "Lower bollinger band: ",

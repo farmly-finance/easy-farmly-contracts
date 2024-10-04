@@ -30,7 +30,11 @@ contract FarmlyPositionManager is
     int256 public latestLowerPrice;
     uint256 public latestTimestamp;
 
-    int256 public positonThreshold = 500; // 500, %1 = 1000
+    int256 public positionThreshold = 500; // 500, %1 = 1000
+    int256 public collectFeesThreshold = 100; // 100, %1 = 1000
+    uint256 public performanceFee = 2e4; // 2e4, %1 = 1000
+    uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
+    address public feeAddress;
 
     address public forwarderAddress;
 
@@ -38,12 +42,14 @@ contract FarmlyPositionManager is
         require(msg.sender == forwarderAddress, "NOT FORWARDER");
         _;
     }
+
     constructor() ERC20("Test Token", "TEST") {
         latestLowerPrice = farmlyBollingerBands.latestLowerBand();
         latestUpperPrice = farmlyBollingerBands.latestUpperBand();
         latestTimestamp =
             farmlyBollingerBands.nextPeriodStartTimestamp() -
             farmlyBollingerBands.period();
+        feeAddress = msg.sender;
     }
 
     function decimals() public view virtual override returns (uint8) {
@@ -70,43 +76,25 @@ contract FarmlyPositionManager is
         int256 upperBand,
         int256 lowerBand
     ) internal view returns (bool) {
-        int256 upperThreshold = (latestUpperPrice * positonThreshold) / 1e5;
-        int256 lowerThreshold = (latestLowerPrice * positonThreshold) / 1e5;
+        int256 upperThreshold = (latestUpperPrice * positionThreshold) /
+            int256(THRESHOLD_DENOMINATOR);
+        int256 lowerThreshold = (latestLowerPrice * positionThreshold) /
+            int256(THRESHOLD_DENOMINATOR);
 
-        bool upperNeeded = (latestUpperPrice - upperThreshold < upperBand) ||
-            (latestUpperPrice + upperThreshold > upperBand);
+        bool upperNeeded = (upperBand < latestUpperPrice - upperThreshold) ||
+            (upperBand > latestUpperPrice + upperThreshold);
 
-        bool lowerNeeded = (latestLowerPrice - lowerThreshold < lowerBand) ||
-            (latestLowerPrice + lowerThreshold > lowerBand);
+        bool lowerNeeded = (lowerBand < latestLowerPrice - lowerThreshold) ||
+            (lowerBand > latestLowerPrice + lowerThreshold);
 
         return upperNeeded || lowerNeeded;
-    }
-
-    function decodeData()
-        external
-        view
-        returns (int256, int256, uint256, bytes memory)
-    {
-        int256 latestUpperBand = farmlyBollingerBands.latestUpperBand();
-        int256 latestLowerBand = farmlyBollingerBands.latestLowerBand();
-        uint256 nextTimestamp = latestTimestamp + farmlyBollingerBands.period();
-
-        bytes memory dataa = abi.encode(
-            latestUpperBand,
-            latestLowerBand,
-            nextTimestamp
-        );
-        (int256 upperBand, int256 lowerBand, uint256 timestamp) = abi.decode(
-            dataa,
-            (int256, int256, uint256)
-        );
-
-        return (upperBand, lowerBand, timestamp, dataa);
     }
 
     function performUpkeep(
         bytes calldata /* performData */
     ) external override onlyForwarder {
+        collectPositionFees();
+
         int256 upperBand = farmlyBollingerBands.latestUpperBand();
         int256 lowerBand = farmlyBollingerBands.latestLowerBand();
         if (isUpkeepNeeded(upperBand, lowerBand)) {
@@ -174,6 +162,7 @@ contract FarmlyPositionManager is
     }
 
     function deposit(uint256 amount0, uint256 amount1) public {
+        collectPositionFees();
         uint256 _usdValueBefore = totalUSDValue();
 
         token0.transferFrom(msg.sender, address(this), amount0);
@@ -229,6 +218,7 @@ contract FarmlyPositionManager is
     }
 
     function withdraw(uint256 amount) public {
+        collectPositionFees();
         (, , , , , , , uint128 liquidity, , , , ) = nonfungiblePositionManager
             .positions(latestTokenId);
 
@@ -246,6 +236,20 @@ contract FarmlyPositionManager is
         /*
          * PERFORMANCE FEE
          */
+    }
+
+    function collectPositionFees() internal {
+        if (latestTokenId != 0) {
+            (uint256 amount0, uint256 amount1) = collectFees();
+            token0.transfer(
+                feeAddress,
+                (amount0 * performanceFee) / THRESHOLD_DENOMINATOR
+            );
+            token1.transfer(
+                feeAddress,
+                (amount1 * performanceFee) / THRESHOLD_DENOMINATOR
+            );
+        }
     }
 
     function getLatestPrices()
@@ -303,6 +307,6 @@ contract FarmlyPositionManager is
     }
 
     function setPositionThreshold(int256 _threshold) public onlyOwner {
-        positonThreshold = _threshold;
+        positionThreshold = _threshold;
     }
 }
