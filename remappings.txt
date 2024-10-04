@@ -4,3 +4,4 @@
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
 uni-v3-lib/=lib/uni-v3-lib.git/
 solady/=lib/solady/
+@solmate/=lib/solmate/src/
