@@ -21,6 +21,14 @@ contract FarmlyPositionManagerTest is Test {
         );
     }
 
+    function test_PositionFees() public {
+        (uint256 amount0, uint256 amount1) = farmlyPositionManager
+            .positionFees();
+
+        console.log(amount0);
+        console.log(amount1);
+    }
+
     function test_Deposit() public {
         console.log(
             "Lower bollinger band: ",

@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
+import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
 
 import {FarmlyUniV3Executor} from "./FarmlyUniV3Executor.sol";
 
@@ -31,7 +32,6 @@ contract FarmlyPositionManager is
     uint256 public latestTimestamp;
 
     int256 public positionThreshold = 500; // 500, %1 = 1000
-    int256 public collectFeesThreshold = 100; // 100, %1 = 1000
     uint256 public performanceFee = 2e4; // 2e4, %1 = 1000
     uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
     address public feeAddress;
@@ -69,7 +69,6 @@ contract FarmlyPositionManager is
                 upkeepNeeded = isUpkeepNeeded(latestUpperBand, latestLowerBand);
             }
         }
-        // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
     }
 
     function isUpkeepNeeded(
@@ -97,25 +96,18 @@ contract FarmlyPositionManager is
 
         int256 upperBand = farmlyBollingerBands.latestUpperBand();
         int256 lowerBand = farmlyBollingerBands.latestLowerBand();
+
         if (isUpkeepNeeded(upperBand, lowerBand)) {
             uint256 timestamp = latestTimestamp + farmlyBollingerBands.period();
 
-            (
-                ,
-                ,
-                ,
-                ,
-                ,
-                ,
-                ,
-                uint128 liquidity,
-                ,
-                ,
-                ,
+            uint128 liquidity = positionLiquidity();
 
-            ) = nonfungiblePositionManager.positions(latestTokenId);
+            decreasePosition(liquidity);
 
-            (uint256 amount0, uint256 amount1) = decreasePosition(liquidity);
+            uint256 amount0 = token0.balanceOf(address(this));
+            uint256 amount1 = token1.balanceOf(address(this));
+
+            burnPositionToken();
 
             PositionInfo memory positionInfo = PositionInfo(
                 getTick(lowerBand),
@@ -136,8 +128,16 @@ contract FarmlyPositionManager is
                 swapInfo.amountIn
             );
 
-            token0.approve(address(nonfungiblePositionManager), amount0Add);
-            token1.approve(address(nonfungiblePositionManager), amount1Add);
+            FarmlyTransferHelper.safeApprove(
+                address(token0),
+                address(nonfungiblePositionManager),
+                amount0Add
+            );
+            FarmlyTransferHelper.safeApprove(
+                address(token1),
+                address(nonfungiblePositionManager),
+                amount1Add
+            );
 
             (uint256 tokenId, , ) = mintPosition(
                 positionInfo,
@@ -150,29 +150,33 @@ contract FarmlyPositionManager is
             latestTimestamp = timestamp;
             latestTokenId = tokenId;
         }
-        /*
-        
-        TODO:: 
-
-        MEVCUT POZİSYONU ÇEK VE YENİ FİYAT ARALIKLARINA GÖRE POZİSYON OLUŞTUR.
-
-        YENİ ARALIK İÇİN SWAP GEREKİYORSA POZİSYONU OLUŞTURMADAN ÖNCE SWAP İŞLEMİNİ YAP.
-        
-         */
     }
 
     function deposit(uint256 amount0, uint256 amount1) public {
         collectPositionFees();
         uint256 _usdValueBefore = totalUSDValue();
 
-        token0.transferFrom(msg.sender, address(this), amount0);
-        token1.transferFrom(msg.sender, address(this), amount1);
+        if (amount0 > 0)
+            FarmlyTransferHelper.safeTransferFrom(
+                address(token0),
+                msg.sender,
+                address(this),
+                amount0
+            );
+
+        if (amount1 > 0)
+            FarmlyTransferHelper.safeTransferFrom(
+                address(token1),
+                msg.sender,
+                address(this),
+                amount1
+            );
 
         PositionInfo memory positionInfo = PositionInfo(
             getTick(latestLowerPrice),
             getTick(latestUpperPrice),
-            amount0,
-            amount1
+            token0.balanceOf(address(this)),
+            token1.balanceOf(address(this))
         );
 
         (
@@ -183,8 +187,16 @@ contract FarmlyPositionManager is
 
         swapExactInput(swapInfo.tokenIn, swapInfo.tokenOut, swapInfo.amountIn);
 
-        token0.approve(address(nonfungiblePositionManager), amount0Add);
-        token1.approve(address(nonfungiblePositionManager), amount1Add);
+        FarmlyTransferHelper.safeApprove(
+            address(token0),
+            address(nonfungiblePositionManager),
+            amount0Add
+        );
+        FarmlyTransferHelper.safeApprove(
+            address(token1),
+            address(nonfungiblePositionManager),
+            amount1Add
+        );
 
         if (latestTokenId == 0) {
             (uint256 tokenId, , ) = mintPosition(
@@ -197,30 +209,23 @@ contract FarmlyPositionManager is
             increasePosition(amount0Add, amount1Add);
         }
 
-        (int256 token0Price, int256 token1Price) = getLatestPrices();
-        int256 userDepositUSD = ((int256(amount0) * token0Price) / 1e18) +
-            ((int256(amount1) * token1Price) / 1e6);
+        (, , uint256 userDepositUSD) = tokensUSD(amount0, amount1);
 
         _mint(
             msg.sender,
             totalSupply() == 0
-                ? uint256(userDepositUSD)
+                ? userDepositUSD
                 : FarmlyFullMath.mulDiv(
-                    uint256(userDepositUSD),
+                    userDepositUSD,
                     totalSupply(),
                     _usdValueBefore
                 )
         );
-
-        /*
-         * PERFORMANCE FEE
-         */
     }
 
     function withdraw(uint256 amount) public {
-        collectPositionFees();
-        (, , , , , , , uint128 liquidity, , , , ) = nonfungiblePositionManager
-            .positions(latestTokenId);
+        collectAndIncrease();
+        uint128 liquidity = positionLiquidity();
 
         uint256 liquidityToWithdraw = (liquidity * amount) / totalSupply();
 
@@ -230,25 +235,86 @@ contract FarmlyPositionManager is
             uint128(liquidityToWithdraw)
         );
 
-        token0.transfer(msg.sender, amount0);
-        token1.transfer(msg.sender, amount1);
+        uint128 liquidityAfter = positionLiquidity();
 
-        /*
-         * PERFORMANCE FEE
-         */
+        if (liquidityAfter == 0) burnPositionToken();
+
+        if (amount0 > 0)
+            FarmlyTransferHelper.safeTransfer(
+                address(token0),
+                msg.sender,
+                amount0
+            );
+
+        if (amount1 > 0)
+            FarmlyTransferHelper.safeTransfer(
+                address(token1),
+                msg.sender,
+                amount1
+            );
     }
 
     function collectPositionFees() internal {
         if (latestTokenId != 0) {
             (uint256 amount0, uint256 amount1) = collectFees();
-            token0.transfer(
-                feeAddress,
-                (amount0 * performanceFee) / THRESHOLD_DENOMINATOR
+
+            uint256 amount0Fee = (amount0 * performanceFee) /
+                THRESHOLD_DENOMINATOR;
+
+            uint256 amount1Fee = (amount1 * performanceFee) /
+                THRESHOLD_DENOMINATOR;
+
+            if (amount0Fee > 0)
+                FarmlyTransferHelper.safeTransfer(
+                    address(token0),
+                    feeAddress,
+                    amount0Fee
+                );
+
+            if (amount1Fee > 0)
+                FarmlyTransferHelper.safeTransfer(
+                    address(token1),
+                    feeAddress,
+                    amount1Fee
+                );
+        }
+    }
+
+    function collectAndIncrease() internal {
+        if (latestTokenId != 0) {
+            collectPositionFees();
+
+            PositionInfo memory positionInfo = PositionInfo(
+                getTick(latestLowerPrice),
+                getTick(latestUpperPrice),
+                token0.balanceOf(address(this)),
+                token1.balanceOf(address(this))
             );
-            token1.transfer(
-                feeAddress,
-                (amount1 * performanceFee) / THRESHOLD_DENOMINATOR
+
+            (
+                SwapInfo memory swapInfo,
+                uint256 amount0Add,
+                uint256 amount1Add
+            ) = getAmountsForAdd(positionInfo);
+
+            swapExactInput(
+                swapInfo.tokenIn,
+                swapInfo.tokenOut,
+                swapInfo.amountIn
             );
+
+            FarmlyTransferHelper.safeApprove(
+                address(token0),
+                address(nonfungiblePositionManager),
+                amount0Add
+            );
+            FarmlyTransferHelper.safeApprove(
+                address(token1),
+                address(nonfungiblePositionManager),
+                amount1Add
+            );
+
+            increasePosition(amount0Add, amount1Add);
         }
     }
 
@@ -261,22 +327,66 @@ contract FarmlyPositionManager is
         (, token1Price, , , ) = token1DataFeed.latestRoundData();
     }
 
+    function tokensUSD(
+        uint256 amount0,
+        uint256 amount1
+    )
+        internal
+        view
+        returns (uint256 token0USD, uint256 token1USD, uint256 totalUSD)
+    {
+        (int256 token0Price, int256 token1Price) = getLatestPrices();
+        token0USD =
+            (amount0 * uint256(token0Price)) /
+            (10 ** token0.decimals());
+        token1USD =
+            (amount1 * uint256(token1Price)) /
+            (10 ** token1.decimals());
+        totalUSD = token0USD + token1USD;
+    }
+
+    function positionFeesUSD()
+        public
+        view
+        returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD)
+    {
+        if (latestTokenId != 0) {
+            (uint256 amount0, uint256 amount1) = positionFees();
+            (amount0USD, amount1USD, totalUSD) = tokensUSD(amount0, amount1);
+        }
+    }
+
+    function positionAmountsUSD()
+        public
+        view
+        returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD)
+    {
+        if (latestTokenId != 0) {
+            (uint256 amount0, uint256 amount1) = positionAmounts();
+            (amount0USD, amount1USD, totalUSD) = tokensUSD(amount0, amount1);
+        }
+    }
+
+    function balancesUSD()
+        public
+        view
+        returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD)
+    {
+        uint256 amount0 = token0.balanceOf(address(this));
+        uint256 amount1 = token1.balanceOf(address(this));
+        (amount0USD, amount1USD, totalUSD) = tokensUSD(amount0, amount1);
+    }
+
     function totalUSDValue() public view returns (uint256 usdValue) {
         if (latestTokenId == 0) {
-            usdValue = 0;
+            (, , uint256 balancesTotal) = balancesUSD();
+            usdValue = balancesTotal;
         } else {
-            (uint256 amount0, uint256 amount1) = positionAmounts();
-            (int256 token0Price, int256 token1Price) = getLatestPrices();
-            uint256 positionValue = ((amount0 * uint256(token0Price)) / 1e18) +
-                ((amount1 * uint256(token1Price)) / 1e6);
+            (, , uint256 positionFeesTotal) = positionFeesUSD();
+            (, , uint256 positionAmountsTotal) = positionAmountsUSD();
+            (, , uint256 balancesTotal) = balancesUSD();
 
-            uint256 token0Balance = token0.balanceOf(address(this));
-            uint256 token1Balance = token1.balanceOf(address(this));
-
-            uint256 balancesValue = ((token0Balance * uint256(token0Price)) /
-                1e18) + ((token1Balance * uint256(token1Price)) / 1e6);
-
-            usdValue = positionValue + balancesValue;
+            usdValue = positionFeesTotal + positionAmountsTotal + balancesTotal;
         }
     }
 
@@ -293,8 +403,7 @@ contract FarmlyPositionManager is
         /*
         will be removed
          */
-        (, , , , , , , uint128 liquidity, , , , ) = nonfungiblePositionManager
-            .positions(latestTokenId);
+        uint128 liquidity = positionLiquidity();
 
         decreasePosition(liquidity);
 
@@ -308,5 +417,13 @@ contract FarmlyPositionManager is
 
     function setPositionThreshold(int256 _threshold) public onlyOwner {
         positionThreshold = _threshold;
+    }
+
+    function setFeeAddress(address _feeAddress) public onlyOwner {
+        feeAddress = _feeAddress;
+    }
+
+    function setPerformanceFee(uint256 _fee) public onlyOwner {
+        performanceFee = _fee;
     }
 }

@@ -7,10 +7,13 @@ import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
+import "@uniswap/v3-core/contracts/libraries/FixedPoint128.sol";
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 
 import {SqrtPriceX96} from "./libraries/SqrtPriceX96.sol";
 import {FarmlyZapV3, V3PoolCallee} from "./libraries/FarmlyZapV3.sol";
+import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
+import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
 
 contract FarmlyUniV3Executor is IERC721Receiver {
     IERC20Metadata public token0;
@@ -137,26 +140,37 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         (amount0, amount1) = _collect();
     }
 
+    function burnPositionToken() internal {
+        nonfungiblePositionManager.burn(latestTokenId);
+        latestTokenId = 0;
+    }
+
     function swapExactInput(
         address tokenIn,
         address tokenOut,
         uint amountIn
     ) internal returns (uint amountOut) {
-        IERC20Metadata(tokenIn).approve(address(swapRouter), amountIn);
+        if (amountIn > 0) {
+            FarmlyTransferHelper.safeApprove(
+                tokenIn,
+                address(swapRouter),
+                amountIn
+            );
 
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
-            .ExactInputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                fee: poolFee,
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: amountIn,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            });
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+                .ExactInputSingleParams({
+                    tokenIn: tokenIn,
+                    tokenOut: tokenOut,
+                    fee: poolFee,
+                    recipient: address(this),
+                    deadline: block.timestamp,
+                    amountIn: amountIn,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                });
 
-        amountOut = swapRouter.exactInputSingle(params);
+            amountOut = swapRouter.exactInputSingle(params);
+        }
     }
 
     function getAmountsForAdd(
@@ -243,6 +257,126 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         );
     }
 
+    function positionFees()
+        public
+        view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        (
+            ,
+            ,
+            ,
+            ,
+            ,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            uint256 feeGrowthInside0LastX128,
+            uint256 feeGrowthInside1LastX128,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        ) = nonfungiblePositionManager.positions(latestTokenId);
+
+        (
+            uint256 poolFeeGrowthInside0LastX128,
+            uint256 poolFeeGrowthInside1LastX128
+        ) = getFeeGrowthInside(tickLower, tickUpper);
+
+        amount0 =
+            FarmlyFullMath.mulDiv(
+                poolFeeGrowthInside0LastX128 - feeGrowthInside0LastX128,
+                liquidity,
+                FixedPoint128.Q128
+            ) +
+            tokensOwed0;
+
+        amount1 =
+            FarmlyFullMath.mulDiv(
+                poolFeeGrowthInside1LastX128 - feeGrowthInside1LastX128,
+                liquidity,
+                FixedPoint128.Q128
+            ) +
+            tokensOwed1;
+    }
+
+    function getFeeGrowthInside(
+        int24 tickLower,
+        int24 tickUpper
+    )
+        internal
+        view
+        returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128)
+    {
+        (, int24 tick, , , , , ) = pool.slot0();
+
+        (
+            ,
+            ,
+            uint256 lowerFeeGrowthOutside0X128,
+            uint256 lowerFeeGrowthOutside1X128,
+            ,
+            ,
+            ,
+
+        ) = pool.ticks(tickLower);
+        (
+            ,
+            ,
+            uint256 upperFeeGrowthOutside0X128,
+            uint256 upperFeeGrowthOutside1X128,
+            ,
+            ,
+            ,
+
+        ) = pool.ticks(tickUpper);
+
+        uint256 feeGrowthGlobal0X128 = pool.feeGrowthGlobal0X128();
+        uint256 feeGrowthGlobal1X128 = pool.feeGrowthGlobal1X128();
+
+        uint256 feeGrowthBelow0X128;
+        uint256 feeGrowthBelow1X128;
+        if (tick >= tickLower) {
+            feeGrowthBelow0X128 = lowerFeeGrowthOutside0X128;
+            feeGrowthBelow1X128 = lowerFeeGrowthOutside1X128;
+        } else {
+            unchecked {
+                feeGrowthBelow0X128 =
+                    feeGrowthGlobal0X128 -
+                    lowerFeeGrowthOutside0X128;
+                feeGrowthBelow1X128 =
+                    feeGrowthGlobal1X128 -
+                    lowerFeeGrowthOutside1X128;
+            }
+        }
+
+        uint256 feeGrowthAbove0X128;
+        uint256 feeGrowthAbove1X128;
+        if (tick < tickUpper) {
+            feeGrowthAbove0X128 = upperFeeGrowthOutside0X128;
+            feeGrowthAbove1X128 = upperFeeGrowthOutside1X128;
+        } else {
+            unchecked {
+                feeGrowthAbove0X128 =
+                    feeGrowthGlobal0X128 -
+                    upperFeeGrowthOutside0X128;
+                feeGrowthAbove1X128 =
+                    feeGrowthGlobal1X128 -
+                    upperFeeGrowthOutside1X128;
+            }
+        }
+
+        unchecked {
+            feeGrowthInside0X128 =
+                feeGrowthGlobal0X128 -
+                feeGrowthBelow0X128 -
+                feeGrowthAbove0X128;
+            feeGrowthInside1X128 =
+                feeGrowthGlobal1X128 -
+                feeGrowthBelow1X128 -
+                feeGrowthAbove1X128;
+        }
+    }
+
     function getTick(int256 price) internal view returns (int24) {
         return
             SqrtPriceX96.nearestUsableTick(
@@ -255,5 +389,10 @@ contract FarmlyUniV3Executor is IERC721Receiver {
                 ),
                 tickSpacing
             );
+    }
+
+    function positionLiquidity() internal view returns (uint128 liquidity) {
+        (, , , , , , , liquidity, , , , ) = nonfungiblePositionManager
+            .positions(latestTokenId);
     }
 }
