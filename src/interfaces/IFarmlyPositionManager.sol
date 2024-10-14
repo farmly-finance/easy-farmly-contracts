@@ -63,4 +63,23 @@ interface IFarmlyPositionManager is IFarmlyUniV3Executor {
         external
         view
         returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD);
+
+    event Deposit(
+        uint256 amount0,
+        uint256 amount1,
+        uint256 shareAmount,
+        uint256 depositUSD
+    );
+
+    event Withdraw(uint256 amount0, uint256 amount1, uint256 shareAmount);
+
+    event PerformPosition(
+        uint256 amount0Added,
+        uint256 amount1Added,
+        int256 upperPrice,
+        int256 lowerPrice,
+        uint256 sharePrice,
+        uint256 timestamp,
+        uint256 tokenId
+    );
 }
