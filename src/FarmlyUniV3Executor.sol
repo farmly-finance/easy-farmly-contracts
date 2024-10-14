@@ -18,8 +18,8 @@ import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
 contract FarmlyUniV3Executor is IERC721Receiver {
     IERC20Metadata public token0;
     IERC20Metadata public token1;
-    uint24 poolFee = 500;
-    uint24 tickSpacing = 10;
+    uint24 public poolFee = 500;
+    uint24 public tickSpacing = 10;
     uint256 public latestTokenId;
 
     INonfungiblePositionManager public nonfungiblePositionManager =
@@ -388,6 +388,17 @@ contract FarmlyUniV3Executor is IERC721Receiver {
                     )
                 ),
                 tickSpacing
+            );
+    }
+
+    function decodeTick(int24 tick) internal view returns (int256) {
+        return
+            int256(
+                SqrtPriceX96.decodeSqrtPriceX96(
+                    TickMath.getSqrtRatioAtTick(tick),
+                    token0.decimals(),
+                    token1.decimals()
+                )
             );
     }
 
