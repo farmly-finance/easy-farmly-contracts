@@ -27,6 +27,7 @@ interface IFarmlyEasyReader {
         view
         returns (
             int256 latestLowerPrice,
+            int256 latestPrice,
             int256 latestUpperPrice,
             uint256 latestTimestamp,
             uint256 latestTokenId
@@ -63,7 +64,41 @@ interface IFarmlyEasyReader {
         address user
     ) external view returns (uint256[] memory balances);
 
+    function getTokenAllowances(
+        IERC20Metadata[] memory tokens,
+        address spender,
+        address user
+    ) external view returns (uint256[] memory allowances);
+
     function getTokenPrices(
         IFarmlyPositionManager positionManager
-    ) external view returns (int256 token0Price, int256 token1Price);
+    )
+        external
+        view
+        returns (
+            int256 token0Price,
+            int256 token1Price,
+            uint8 token0PriceDecimals,
+            uint8 token1PriceDecimals
+        );
+
+    function getSlot0(
+        IFarmlyPositionManager positionManager
+    )
+        external
+        view
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            uint8 feeProtocol,
+            bool unlocked
+        );
+
+    function shareToAmounts(
+        IFarmlyPositionManager positionManager,
+        uint256 amount
+    ) external view returns (uint256 amount0, uint256 amount1);
 }
