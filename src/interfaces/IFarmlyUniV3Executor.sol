@@ -1,5 +1,8 @@
 pragma solidity ^0.8.13;
 
+import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
+
 interface IFarmlyUniV3Executor {
     struct PositionInfo {
         int24 tickLower;
@@ -53,4 +56,11 @@ interface IFarmlyUniV3Executor {
         external
         view
         returns (uint256 amount0, uint256 amount1);
+
+    function pool() external view returns (IUniswapV3Pool pool);
+
+    function nonfungiblePositionManager()
+        external
+        view
+        returns (INonfungiblePositionManager nonfungiblePositionManager);
 }
