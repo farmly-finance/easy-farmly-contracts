@@ -38,6 +38,25 @@ contract FarmlyPositionManager is
 
     address public forwarderAddress;
 
+    event Deposit(
+        uint256 amount0,
+        uint256 amount1,
+        uint256 shareAmount,
+        uint256 depositUSD
+    );
+
+    event Withdraw(uint256 amount0, uint256 amount1, uint256 shareAmount);
+
+    event PerformPosition(
+        uint256 amount0Added,
+        uint256 amount1Added,
+        int256 upperPrice,
+        int256 lowerPrice,
+        uint256 sharePrice,
+        uint256 timestamp,
+        uint256 tokenId
+    );
+
     modifier onlyForwarder() {
         require(msg.sender == forwarderAddress, "NOT FORWARDER");
         _;
@@ -145,10 +164,20 @@ contract FarmlyPositionManager is
                 amount1Add
             );
 
-            latestUpperPrice = upperBand;
-            latestLowerPrice = lowerBand;
+            latestUpperPrice = decodeTick(positionInfo.tickUpper);
+            latestLowerPrice = decodeTick(positionInfo.tickLower);
             latestTimestamp = timestamp;
             latestTokenId = tokenId;
+
+            emit PerformPosition(
+                amount0Add,
+                amount1Add,
+                latestUpperPrice,
+                latestLowerPrice,
+                sharePrice(),
+                timestamp,
+                tokenId
+            );
         }
     }
 
@@ -205,22 +234,32 @@ contract FarmlyPositionManager is
                 amount1Add
             );
             latestTokenId = tokenId;
+
+            emit PerformPosition(
+                amount0Add,
+                amount1Add,
+                latestUpperPrice,
+                latestLowerPrice,
+                sharePrice(),
+                latestTimestamp,
+                latestTokenId
+            );
         } else {
             increasePosition(amount0Add, amount1Add);
         }
 
         (, , uint256 userDepositUSD) = tokensUSD(amount0, amount1);
 
-        _mint(
-            msg.sender,
-            totalSupply() == 0
-                ? userDepositUSD
-                : FarmlyFullMath.mulDiv(
-                    userDepositUSD,
-                    totalSupply(),
-                    _usdValueBefore
-                )
-        );
+        uint256 shareAmount = totalSupply() == 0
+            ? userDepositUSD
+            : FarmlyFullMath.mulDiv(
+                userDepositUSD,
+                totalSupply(),
+                _usdValueBefore
+            );
+        _mint(msg.sender, shareAmount);
+
+        emit Deposit(amount0, amount1, shareAmount, userDepositUSD);
     }
 
     function withdraw(uint256 amount) public {
@@ -252,6 +291,8 @@ contract FarmlyPositionManager is
                 msg.sender,
                 amount1
             );
+
+        emit Withdraw(amount0, amount1, amount);
     }
 
     function collectPositionFees() internal {
@@ -378,37 +419,29 @@ contract FarmlyPositionManager is
     }
 
     function totalUSDValue() public view returns (uint256 usdValue) {
-        if (latestTokenId == 0) {
-            (, , uint256 balancesTotal) = balancesUSD();
-            usdValue = balancesTotal;
-        } else {
+        if (latestTokenId != 0) {
             (, , uint256 positionFeesTotal) = positionFeesUSD();
             (, , uint256 positionAmountsTotal) = positionAmountsUSD();
-            (, , uint256 balancesTotal) = balancesUSD();
 
-            usdValue = positionFeesTotal + positionAmountsTotal + balancesTotal;
+            uint256 positionFeesWithoutPerformanceFee = (positionFeesTotal *
+                (THRESHOLD_DENOMINATOR - performanceFee)) /
+                THRESHOLD_DENOMINATOR;
+
+            usdValue = positionFeesWithoutPerformanceFee + positionAmountsTotal;
         }
     }
 
     function sharePrice() public view returns (uint256) {
+        if (totalSupply() == 0) {
+            return 1e8;
+        }
+
         return (totalUSDValue() * 1e8) / totalSupply();
     }
 
     function setLatestBollingers(int256 lower, int256 upper) public onlyOwner {
         latestLowerPrice = lower;
         latestUpperPrice = upper;
-    }
-
-    function emergency_withdraw() public onlyOwner {
-        /*
-        will be removed
-         */
-        uint128 liquidity = positionLiquidity();
-
-        decreasePosition(liquidity);
-
-        token0.transfer(owner(), token0.balanceOf(address(this)));
-        token1.transfer(owner(), token1.balanceOf(address(this)));
     }
 
     function setForwarder(address _forwarderAddress) public onlyOwner {
