@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./interfaces/IFarmlyEasyFarm.sol";
 import {SqrtPriceX96} from "./libraries/SqrtPriceX96.sol";
 import {FarmlyZapV3, V3PoolCallee} from "./libraries/FarmlyZapV3.sol";
+import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 
 contract FarmlyEasyReader {
     uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
@@ -68,21 +69,19 @@ contract FarmlyEasyReader {
         public
         view
         returns (
-            int256 latestLowerPrice,
-            int256 latestPrice,
-            int256 latestUpperPrice,
+            uint256 latestLowerPrice,
+            uint256 latestPrice,
+            uint256 latestUpperPrice,
             uint256 latestTimestamp,
             uint256 latestTokenId
         )
     {
         (uint160 sqrtPriceX96, , , , , , ) = getSlot0(farmlyEasyFarm);
         latestLowerPrice = farmlyEasyFarm.latestLowerPrice();
-        latestPrice = int256(
-            SqrtPriceX96.decodeSqrtPriceX96(
-                sqrtPriceX96,
-                IERC20Metadata(farmlyEasyFarm.token0()).decimals(),
-                IERC20Metadata(farmlyEasyFarm.token1()).decimals()
-            )
+        latestPrice = SqrtPriceX96.decodeSqrtPriceX96(
+            sqrtPriceX96,
+            IERC20Metadata(farmlyEasyFarm.token0()).decimals(),
+            IERC20Metadata(farmlyEasyFarm.token1()).decimals()
         );
         latestUpperPrice = farmlyEasyFarm.latestUpperPrice();
         latestTimestamp = farmlyEasyFarm.latestTimestamp();
@@ -95,7 +94,7 @@ contract FarmlyEasyReader {
         public
         view
         returns (
-            int256 positionThreshold,
+            uint256 positionThreshold,
             uint256 performanceFee,
             address feeAddress,
             address forwarderAddress,
@@ -188,32 +187,97 @@ contract FarmlyEasyReader {
         IFarmlyEasyFarm farmlyEasyFarm,
         uint256 amount
     ) public view returns (uint256 amount0, uint256 amount1) {
-        (uint256 amount0Fee, uint256 amount1Fee) = farmlyEasyFarm
-            .positionFees();
+        // Calculate fees
+        (uint256 amount0Fee, uint256 amount1Fee) = calculateFees(
+            farmlyEasyFarm
+        );
 
-        amount0Fee -=
-            (amount0Fee * farmlyEasyFarm.performanceFee()) /
-            THRESHOLD_DENOMINATOR;
+        // Get position info
+        IFarmlyUniV3Executor.PositionInfo memory positionInfo = getPositionInfo(
+            farmlyEasyFarm,
+            amount0Fee,
+            amount1Fee
+        );
 
-        amount1Fee -=
-            (amount1Fee * farmlyEasyFarm.performanceFee()) /
-            THRESHOLD_DENOMINATOR;
-
-        IFarmlyUniV3Executor.PositionInfo
-            memory positionInfo = IFarmlyUniV3Executor.PositionInfo(
-                getTick(farmlyEasyFarm, farmlyEasyFarm.latestLowerPrice()),
-                getTick(farmlyEasyFarm, farmlyEasyFarm.latestUpperPrice()),
-                amount0Fee,
-                amount1Fee
-            );
-
+        // Calculate swap info and amounts
         (
             IFarmlyUniV3Executor.SwapInfo memory swapInfo,
             uint256 amount0Add,
             uint256 amount1Add
-        ) = farmlyEasyFarm.getAmountsForAdd(positionInfo);
+        ) = calculateSwapInfo(farmlyEasyFarm, positionInfo);
 
-        uint128 feesLiquidity = LiquidityAmounts.getLiquidityForAmounts(
+        // Calculate liquidity and amounts
+        (amount0, amount1) = calculateLiquidityAmounts(
+            swapInfo,
+            positionInfo,
+            amount0Add,
+            amount1Add,
+            farmlyEasyFarm,
+            amount
+        );
+    }
+
+    function calculateFees(
+        IFarmlyEasyFarm farmlyEasyFarm
+    ) internal view returns (uint256 amount0Fee, uint256 amount1Fee) {
+        (amount0Fee, amount1Fee) = farmlyEasyFarm.positionFees();
+
+        amount0Fee -= FarmlyFullMath.mulDiv(
+            amount0Fee,
+            farmlyEasyFarm.performanceFee(),
+            THRESHOLD_DENOMINATOR
+        );
+
+        amount1Fee -= FarmlyFullMath.mulDiv(
+            amount1Fee,
+            farmlyEasyFarm.performanceFee(),
+            THRESHOLD_DENOMINATOR
+        );
+    }
+
+    function getPositionInfo(
+        IFarmlyEasyFarm farmlyEasyFarm,
+        uint256 amount0Fee,
+        uint256 amount1Fee
+    )
+        internal
+        view
+        returns (IFarmlyUniV3Executor.PositionInfo memory positionInfo)
+    {
+        positionInfo = IFarmlyUniV3Executor.PositionInfo(
+            getTick(farmlyEasyFarm, farmlyEasyFarm.latestLowerPrice()),
+            getTick(farmlyEasyFarm, farmlyEasyFarm.latestUpperPrice()),
+            amount0Fee,
+            amount1Fee
+        );
+    }
+
+    function calculateSwapInfo(
+        IFarmlyEasyFarm farmlyEasyFarm,
+        IFarmlyUniV3Executor.PositionInfo memory positionInfo
+    )
+        internal
+        view
+        returns (
+            IFarmlyUniV3Executor.SwapInfo memory swapInfo,
+            uint256 amount0Add,
+            uint256 amount1Add
+        )
+    {
+        (swapInfo, amount0Add, amount1Add) = farmlyEasyFarm.getAmountsForAdd(
+            positionInfo
+        );
+    }
+
+    function calculateLiquidityAmounts(
+        IFarmlyUniV3Executor.SwapInfo memory swapInfo,
+        IFarmlyUniV3Executor.PositionInfo memory positionInfo,
+        uint256 amount0Add,
+        uint256 amount1Add,
+        IFarmlyEasyFarm farmlyEasyFarm,
+        uint256 amount
+    ) internal view returns (uint256 amount0, uint256 amount1) {
+        uint256 liquidity = LiquidityAmounts.getLiquidityForAmounts(
             swapInfo.sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(positionInfo.tickLower),
             TickMath.getSqrtRatioAtTick(positionInfo.tickUpper),
@@ -221,26 +285,31 @@ contract FarmlyEasyReader {
             amount1Add
         );
 
-        uint128 _positionLiquidity = positionLiquidity(farmlyEasyFarm);
+        uint256 positionLiquidityAmount = positionLiquidity(farmlyEasyFarm);
 
         (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
             swapInfo.sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(positionInfo.tickLower),
             TickMath.getSqrtRatioAtTick(positionInfo.tickUpper),
-            ((feesLiquidity + _positionLiquidity) * uint128(amount)) /
-                uint128(IERC20(address(farmlyEasyFarm)).totalSupply())
+            uint128(
+                FarmlyFullMath.mulDiv(
+                    liquidity + positionLiquidityAmount,
+                    amount,
+                    IERC20(address(farmlyEasyFarm)).totalSupply()
+                )
+            )
         );
     }
 
     function getTick(
         IFarmlyEasyFarm farmlyEasyFarm,
-        int256 price
+        uint256 price
     ) internal view returns (int24) {
         return
             SqrtPriceX96.nearestUsableTick(
                 TickMath.getTickAtSqrtRatio(
                     SqrtPriceX96.encodeSqrtPriceX96(
-                        uint256(price),
+                        price,
                         IERC20Metadata(farmlyEasyFarm.token0()).decimals(),
                         IERC20Metadata(farmlyEasyFarm.token1()).decimals()
                     )

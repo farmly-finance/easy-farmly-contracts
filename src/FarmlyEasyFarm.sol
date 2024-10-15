@@ -1,13 +1,14 @@
 pragma solidity ^0.8.13;
 
-import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+
+import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
-
 import {FarmlyUniV3Executor} from "./FarmlyUniV3Executor.sol";
 
 import "./interfaces/IFarmlyBollingerBands.sol";
@@ -15,6 +16,7 @@ import "./interfaces/IFarmlyBollingerBands.sol";
 contract FarmlyEasyFarm is
     AutomationCompatibleInterface,
     Ownable,
+    Pausable,
     ERC20,
     FarmlyUniV3Executor
 {
@@ -26,15 +28,14 @@ contract FarmlyEasyFarm is
 
     AggregatorV3Interface public token1DataFeed;
 
-    int256 public latestUpperPrice;
-    int256 public latestLowerPrice;
+    uint256 public latestUpperPrice;
+    uint256 public latestLowerPrice;
     uint256 public latestTimestamp;
 
-    int256 public positionThreshold; // %1 = 1000
+    uint256 public positionThreshold; // %1 = 1000
     uint256 public performanceFee; // %1 = 1000
     address public feeAddress;
-
-    address public forwarderAddress;
+    uint256 public maximumCapacity;
 
     event Deposit(
         uint256 amount0,
@@ -48,17 +49,12 @@ contract FarmlyEasyFarm is
     event PerformPosition(
         uint256 amount0Added,
         uint256 amount1Added,
-        int256 upperPrice,
-        int256 lowerPrice,
+        uint256 upperPrice,
+        uint256 lowerPrice,
         uint256 sharePrice,
         uint256 timestamp,
         uint256 tokenId
     );
-
-    modifier onlyForwarder() {
-        require(msg.sender == forwarderAddress, "NOT FORWARDER");
-        _;
-    }
 
     constructor(
         address _token0,
@@ -66,7 +62,8 @@ contract FarmlyEasyFarm is
         uint24 _poolFee,
         string memory _shareTokenName,
         string memory _shareTokenSymbol,
-        IFarmlyBollingerBands _farmlyBollingerBands
+        IFarmlyBollingerBands _farmlyBollingerBands,
+        uint256 _maximumCapacity
     )
         ERC20(_shareTokenName, _shareTokenSymbol)
         FarmlyUniV3Executor(_token0, _token1, _poolFee)
@@ -84,10 +81,7 @@ contract FarmlyEasyFarm is
             farmlyBollingerBands.nextPeriodStartTimestamp() -
             farmlyBollingerBands.period();
         feeAddress = msg.sender;
-    }
-
-    function decimals() public view virtual override returns (uint8) {
-        return 8;
+        maximumCapacity = _maximumCapacity;
     }
 
     function checkUpkeep(
@@ -98,21 +92,29 @@ contract FarmlyEasyFarm is
             if (
                 nextTimestamp != farmlyBollingerBands.nextPeriodStartTimestamp()
             ) {
-                int256 latestUpperBand = farmlyBollingerBands.latestUpperBand();
-                int256 latestLowerBand = farmlyBollingerBands.latestLowerBand();
+                uint256 latestUpperBand = farmlyBollingerBands
+                    .latestUpperBand();
+                uint256 latestLowerBand = farmlyBollingerBands
+                    .latestLowerBand();
                 upkeepNeeded = isUpkeepNeeded(latestUpperBand, latestLowerBand);
             }
         }
     }
 
     function isUpkeepNeeded(
-        int256 upperBand,
-        int256 lowerBand
+        uint256 upperBand,
+        uint256 lowerBand
     ) internal view returns (bool) {
-        int256 upperThreshold = (latestUpperPrice * positionThreshold) /
-            int256(THRESHOLD_DENOMINATOR);
-        int256 lowerThreshold = (latestLowerPrice * positionThreshold) /
-            int256(THRESHOLD_DENOMINATOR);
+        uint256 upperThreshold = FarmlyFullMath.mulDiv(
+            latestUpperPrice,
+            positionThreshold,
+            THRESHOLD_DENOMINATOR
+        );
+        uint256 lowerThreshold = FarmlyFullMath.mulDiv(
+            latestLowerPrice,
+            positionThreshold,
+            THRESHOLD_DENOMINATOR
+        );
 
         bool upperNeeded = (upperBand < latestUpperPrice - upperThreshold) ||
             (upperBand > latestUpperPrice + upperThreshold);
@@ -123,11 +125,9 @@ contract FarmlyEasyFarm is
         return upperNeeded || lowerNeeded;
     }
 
-    function performUpkeep(
-        bytes calldata /* performData */
-    ) external override onlyForwarder {
-        int256 upperBand = farmlyBollingerBands.latestUpperBand();
-        int256 lowerBand = farmlyBollingerBands.latestLowerBand();
+    function performUpkeep(bytes calldata /* performData */) external override {
+        uint256 upperBand = farmlyBollingerBands.latestUpperBand();
+        uint256 lowerBand = farmlyBollingerBands.latestLowerBand();
 
         if (isUpkeepNeeded(upperBand, lowerBand)) {
             collectPositionFees();
@@ -161,17 +161,6 @@ contract FarmlyEasyFarm is
                 swapInfo.amountIn
             );
 
-            FarmlyTransferHelper.safeApprove(
-                address(token0),
-                address(nonfungiblePositionManager),
-                amount0Add
-            );
-            FarmlyTransferHelper.safeApprove(
-                address(token1),
-                address(nonfungiblePositionManager),
-                amount1Add
-            );
-
             (uint256 tokenId, , ) = mintPosition(
                 positionInfo,
                 amount0Add,
@@ -195,7 +184,7 @@ contract FarmlyEasyFarm is
         }
     }
 
-    function deposit(uint256 amount0, uint256 amount1) public {
+    function deposit(uint256 amount0, uint256 amount1) public whenNotPaused {
         collectPositionFees();
         uint256 _usdValueBefore = totalUSDValue();
 
@@ -230,17 +219,6 @@ contract FarmlyEasyFarm is
 
         swapExactInput(swapInfo.tokenIn, swapInfo.tokenOut, swapInfo.amountIn);
 
-        FarmlyTransferHelper.safeApprove(
-            address(token0),
-            address(nonfungiblePositionManager),
-            amount0Add
-        );
-        FarmlyTransferHelper.safeApprove(
-            address(token1),
-            address(nonfungiblePositionManager),
-            amount1Add
-        );
-
         if (latestTokenId == 0) {
             (uint256 tokenId, , ) = mintPosition(
                 positionInfo,
@@ -264,6 +242,8 @@ contract FarmlyEasyFarm is
 
         (, , uint256 userDepositUSD) = tokensUSD(amount0, amount1);
 
+        require(userDepositUSD + _usdValueBefore <= maximumCapacity);
+
         uint256 shareAmount = totalSupply() == 0
             ? userDepositUSD
             : FarmlyFullMath.mulDiv(
@@ -271,18 +251,24 @@ contract FarmlyEasyFarm is
                 totalSupply(),
                 _usdValueBefore
             );
+
         _mint(msg.sender, shareAmount);
 
         emit Deposit(amount0, amount1, shareAmount, userDepositUSD);
     }
 
     function withdraw(uint256 amount) public {
+        _burn(msg.sender, amount);
+
         collectAndIncrease();
+
         uint128 liquidity = positionLiquidity();
 
-        uint256 liquidityToWithdraw = (liquidity * amount) / totalSupply();
-
-        _burn(msg.sender, amount);
+        uint256 liquidityToWithdraw = FarmlyFullMath.mulDiv(
+            liquidity,
+            amount,
+            totalSupply()
+        );
 
         (uint256 amount0, uint256 amount1) = decreasePosition(
             uint128(liquidityToWithdraw)
@@ -313,11 +299,17 @@ contract FarmlyEasyFarm is
         if (latestTokenId != 0) {
             (uint256 amount0, uint256 amount1) = collectFees();
 
-            uint256 amount0Fee = (amount0 * performanceFee) /
-                THRESHOLD_DENOMINATOR;
+            uint256 amount0Fee = FarmlyFullMath.mulDiv(
+                amount0,
+                performanceFee,
+                THRESHOLD_DENOMINATOR
+            );
 
-            uint256 amount1Fee = (amount1 * performanceFee) /
-                THRESHOLD_DENOMINATOR;
+            uint256 amount1Fee = FarmlyFullMath.mulDiv(
+                amount1,
+                performanceFee,
+                THRESHOLD_DENOMINATOR
+            );
 
             if (amount0Fee > 0)
                 FarmlyTransferHelper.safeTransfer(
@@ -358,17 +350,6 @@ contract FarmlyEasyFarm is
                 swapInfo.amountIn
             );
 
-            FarmlyTransferHelper.safeApprove(
-                address(token0),
-                address(nonfungiblePositionManager),
-                amount0Add
-            );
-            FarmlyTransferHelper.safeApprove(
-                address(token1),
-                address(nonfungiblePositionManager),
-                amount1Add
-            );
-
             increasePosition(amount0Add, amount1Add);
         }
     }
@@ -376,10 +357,21 @@ contract FarmlyEasyFarm is
     function getLatestPrices()
         internal
         view
-        returns (int256 token0Price, int256 token1Price)
+        returns (uint256 token0Price, uint256 token1Price)
     {
-        (, token0Price, , , ) = token0DataFeed.latestRoundData();
-        (, token1Price, , , ) = token1DataFeed.latestRoundData();
+        (, int256 token0Answer, , , ) = token0DataFeed.latestRoundData();
+        (, int256 token1Answer, , , ) = token1DataFeed.latestRoundData();
+
+        token0Price = FarmlyFullMath.mulDiv(
+            uint256(token0Answer),
+            1e18,
+            10 ** token0DataFeed.decimals()
+        );
+        token1Price = FarmlyFullMath.mulDiv(
+            uint256(token1Answer),
+            1e18,
+            10 ** token1DataFeed.decimals()
+        );
     }
 
     function tokensUSD(
@@ -390,13 +382,17 @@ contract FarmlyEasyFarm is
         view
         returns (uint256 token0USD, uint256 token1USD, uint256 totalUSD)
     {
-        (int256 token0Price, int256 token1Price) = getLatestPrices();
-        token0USD =
-            (amount0 * uint256(token0Price)) /
-            (10 ** token0.decimals());
-        token1USD =
-            (amount1 * uint256(token1Price)) /
-            (10 ** token1.decimals());
+        (uint256 token0Price, uint256 token1Price) = getLatestPrices();
+        token0USD = FarmlyFullMath.mulDiv(
+            amount0,
+            token0Price,
+            10 ** token0.decimals()
+        );
+        token1USD = FarmlyFullMath.mulDiv(
+            amount1,
+            token1Price,
+            10 ** token1.decimals()
+        );
         totalUSD = token0USD + token1USD;
     }
 
@@ -437,9 +433,11 @@ contract FarmlyEasyFarm is
             (, , uint256 positionFeesTotal) = positionFeesUSD();
             (, , uint256 positionAmountsTotal) = positionAmountsUSD();
 
-            uint256 positionFeesWithoutPerformanceFee = (positionFeesTotal *
-                (THRESHOLD_DENOMINATOR - performanceFee)) /
-                THRESHOLD_DENOMINATOR;
+            uint256 positionFeesWithoutPerformanceFee = FarmlyFullMath.mulDiv(
+                positionFeesTotal,
+                THRESHOLD_DENOMINATOR - performanceFee,
+                THRESHOLD_DENOMINATOR
+            );
 
             usdValue = positionFeesWithoutPerformanceFee + positionAmountsTotal;
         }
@@ -447,22 +445,24 @@ contract FarmlyEasyFarm is
 
     function sharePrice() public view returns (uint256) {
         if (totalSupply() == 0) {
-            return 1e8;
+            return 1e18;
         }
 
-        return (totalUSDValue() * 1e8) / totalSupply();
+        return FarmlyFullMath.mulDiv(totalUSDValue(), 1e18, totalSupply());
     }
 
-    function setLatestBollingers(int256 lower, int256 upper) public onlyOwner {
+    function setLatestBollingers(
+        uint256 lower,
+        uint256 upper
+    ) public onlyOwner {
+        /* 
+        will be removed
+        */
         latestLowerPrice = lower;
         latestUpperPrice = upper;
     }
 
-    function setForwarder(address _forwarderAddress) public onlyOwner {
-        forwarderAddress = _forwarderAddress;
-    }
-
-    function setPositionThreshold(int256 _threshold) public onlyOwner {
+    function setPositionThreshold(uint256 _threshold) public onlyOwner {
         positionThreshold = _threshold;
     }
 
@@ -472,5 +472,13 @@ contract FarmlyEasyFarm is
 
     function setPerformanceFee(uint256 _fee) public onlyOwner {
         performanceFee = _fee;
+    }
+
+    function pause() public onlyOwner whenNotPaused {
+        _pause();
+    }
+
+    function unpause() public onlyOwner whenPaused {
+        _unpause();
     }
 }

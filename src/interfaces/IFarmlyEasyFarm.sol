@@ -8,13 +8,13 @@ interface IFarmlyEasyFarm is IFarmlyUniV3Executor {
 
     function farmlyBollingerBands() external view returns (address);
 
-    function latestUpperPrice() external view returns (int256);
+    function latestUpperPrice() external view returns (uint256);
 
-    function latestLowerPrice() external view returns (int256);
+    function latestLowerPrice() external view returns (uint256);
 
     function latestTimestamp() external view returns (uint256);
 
-    function positionThreshold() external view returns (int256);
+    function positionThreshold() external view returns (uint256);
 
     function performanceFee() external view returns (uint256);
 
@@ -37,13 +37,13 @@ interface IFarmlyEasyFarm is IFarmlyUniV3Executor {
     ) external view returns (bool upkeepNeeded, bytes memory performData);
     function performUpkeep(bytes calldata performData) external;
 
-    function setLatestBollingers(int256 lower, int256 upper) external;
+    function setLatestBollingers(uint256 lower, uint256 upper) external;
 
     function emergency_withdraw() external;
 
     function setForwarder(address _forwarderAddress) external;
 
-    function setPositionThreshold(int256 _threshold) external;
+    function setPositionThreshold(uint256 _threshold) external;
 
     function setFeeAddress(address _feeAddress) external;
 
@@ -76,8 +76,8 @@ interface IFarmlyEasyFarm is IFarmlyUniV3Executor {
     event PerformPosition(
         uint256 amount0Added,
         uint256 amount1Added,
-        int256 upperPrice,
-        int256 lowerPrice,
+        uint256 upperPrice,
+        uint256 lowerPrice,
         uint256 sharePrice,
         uint256 timestamp,
         uint256 tokenId

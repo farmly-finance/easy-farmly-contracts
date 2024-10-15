@@ -26,9 +26,9 @@ interface IFarmlyEasyReader {
         external
         view
         returns (
-            int256 latestLowerPrice,
-            int256 latestPrice,
-            int256 latestUpperPrice,
+            uint256 latestLowerPrice,
+            uint256 latestPrice,
+            uint256 latestUpperPrice,
             uint256 latestTimestamp,
             uint256 latestTokenId
         );
@@ -39,7 +39,7 @@ interface IFarmlyEasyReader {
         external
         view
         returns (
-            int256 positionThreshold,
+            uint256 positionThreshold,
             uint256 performanceFee,
             address feeAddress,
             address forwarderAddress,

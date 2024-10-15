@@ -17,7 +17,8 @@ contract FarmlyEasyFarmTest is Test {
             500,
             "Test",
             "TEST",
-            IFarmlyBollingerBands(tester)
+            IFarmlyBollingerBands(tester),
+            1e18
         );
 
         farmlyEasyFarm.setLatestBollingers(2000 * 1e18, 2500 * 1e18);

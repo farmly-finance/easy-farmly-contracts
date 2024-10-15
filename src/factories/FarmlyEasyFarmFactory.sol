@@ -19,7 +19,8 @@ contract FarmlyEasyFarmFactory is Ownable {
         uint24 _poolFee,
         string memory _shareTokenName,
         string memory _shareTokenSymbol,
-        IFarmlyBollingerBands _farmlyBollingerBands
+        IFarmlyBollingerBands _farmlyBollingerBands,
+        uint256 _maximumCapacity
     ) public onlyOwner {
         FarmlyEasyFarm newEasyFarm = new FarmlyEasyFarm(
             _token0,
@@ -27,7 +28,8 @@ contract FarmlyEasyFarmFactory is Ownable {
             _poolFee,
             _shareTokenName,
             _shareTokenSymbol,
-            _farmlyBollingerBands
+            _farmlyBollingerBands,
+            _maximumCapacity
         );
 
         newEasyFarm.transferOwnership(msg.sender);

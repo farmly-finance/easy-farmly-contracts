@@ -8,14 +8,14 @@ contract FarmlyBollingerBandsFactory is Ownable {
     event NewFarmlyBollingerBands(
         address bandAddress,
         uint16 ma,
-        int16 multiplier,
+        uint16 multiplier,
         uint256 period,
         uint256 startTimestamp
     );
 
     function createNewBand(
         uint16 _ma,
-        int16 _multiplier,
+        uint16 _multiplier,
         uint256 _period,
         uint256 _startTimestamp,
         address _token0DataFeed,

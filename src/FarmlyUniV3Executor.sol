@@ -16,8 +16,6 @@ import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
 
 contract FarmlyUniV3Executor is IERC721Receiver {
-    IERC20Metadata public token0;
-
     INonfungiblePositionManager public nonfungiblePositionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
@@ -27,11 +25,13 @@ contract FarmlyUniV3Executor is IERC721Receiver {
     IUniswapV3Factory public factory =
         IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
 
+    IERC20Metadata public token0;
     IERC20Metadata public token1;
+
+    IUniswapV3Pool public pool;
     uint24 public poolFee;
     uint24 public tickSpacing;
     uint256 public latestTokenId;
-    IUniswapV3Pool public pool;
 
     struct PositionInfo {
         int24 tickLower;
@@ -70,6 +70,20 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         uint256 amount0Add,
         uint256 amount1Add
     ) internal returns (uint256 tokenId, uint256 amount0, uint256 amount1) {
+        if (amount0Add > 0)
+            FarmlyTransferHelper.safeApprove(
+                address(token0),
+                address(nonfungiblePositionManager),
+                amount0Add
+            );
+
+        if (amount1Add > 0)
+            FarmlyTransferHelper.safeApprove(
+                address(token1),
+                address(nonfungiblePositionManager),
+                amount1Add
+            );
+
         INonfungiblePositionManager.MintParams
             memory params = INonfungiblePositionManager.MintParams({
                 token0: address(token0),
@@ -92,6 +106,20 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         uint256 amount0Add,
         uint256 amount1Add
     ) internal returns (uint128 liquidity, uint256 amount0, uint256 amount1) {
+        if (amount0Add > 0)
+            FarmlyTransferHelper.safeApprove(
+                address(token0),
+                address(nonfungiblePositionManager),
+                amount0Add
+            );
+
+        if (amount1Add > 0)
+            FarmlyTransferHelper.safeApprove(
+                address(token1),
+                address(nonfungiblePositionManager),
+                amount1Add
+            );
+
         (
             ,
             ,
@@ -379,12 +407,12 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         }
     }
 
-    function getTick(int256 price) internal view returns (int24) {
+    function getTick(uint256 price) internal view returns (int24) {
         return
             SqrtPriceX96.nearestUsableTick(
                 TickMath.getTickAtSqrtRatio(
                     SqrtPriceX96.encodeSqrtPriceX96(
-                        uint256(price),
+                        price,
                         token0.decimals(),
                         token1.decimals()
                     )
@@ -393,14 +421,12 @@ contract FarmlyUniV3Executor is IERC721Receiver {
             );
     }
 
-    function decodeTick(int24 tick) internal view returns (int256) {
+    function decodeTick(int24 tick) internal view returns (uint256) {
         return
-            int256(
-                SqrtPriceX96.decodeSqrtPriceX96(
-                    TickMath.getSqrtRatioAtTick(tick),
-                    token0.decimals(),
-                    token1.decimals()
-                )
+            SqrtPriceX96.decodeSqrtPriceX96(
+                TickMath.getSqrtRatioAtTick(tick),
+                token0.decimals(),
+                token1.decimals()
             );
     }
 
