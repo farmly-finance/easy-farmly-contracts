@@ -12,28 +12,26 @@ import {FarmlyUniV3Executor} from "./FarmlyUniV3Executor.sol";
 
 import "./interfaces/IFarmlyBollingerBands.sol";
 
-contract FarmlyPositionManager is
+contract FarmlyEasyFarm is
     AutomationCompatibleInterface,
     Ownable,
     ERC20,
     FarmlyUniV3Executor
 {
-    AggregatorV3Interface public token0DataFeed =
-        AggregatorV3Interface(0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612);
+    uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
 
-    AggregatorV3Interface public token1DataFeed =
-        AggregatorV3Interface(0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3);
+    IFarmlyBollingerBands public farmlyBollingerBands;
 
-    IFarmlyBollingerBands public farmlyBollingerBands =
-        IFarmlyBollingerBands(0x26517Fe4bAdA989d7574410E6909431C90ce968E);
+    AggregatorV3Interface public token0DataFeed;
+
+    AggregatorV3Interface public token1DataFeed;
 
     int256 public latestUpperPrice;
     int256 public latestLowerPrice;
     uint256 public latestTimestamp;
 
-    int256 public positionThreshold = 500; // 500, %1 = 1000
-    uint256 public performanceFee = 2e4; // 2e4, %1 = 1000
-    uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
+    int256 public positionThreshold; // %1 = 1000
+    uint256 public performanceFee; // %1 = 1000
     address public feeAddress;
 
     address public forwarderAddress;
@@ -62,7 +60,24 @@ contract FarmlyPositionManager is
         _;
     }
 
-    constructor() ERC20("Test Token", "TEST") {
+    constructor(
+        address _token0,
+        address _token1,
+        uint24 _poolFee,
+        string memory _shareTokenName,
+        string memory _shareTokenSymbol,
+        IFarmlyBollingerBands _farmlyBollingerBands
+    )
+        ERC20(_shareTokenName, _shareTokenSymbol)
+        FarmlyUniV3Executor(_token0, _token1, _poolFee)
+    {
+        token0DataFeed = AggregatorV3Interface(
+            _farmlyBollingerBands.token0DataFeed()
+        );
+        token1DataFeed = AggregatorV3Interface(
+            _farmlyBollingerBands.token1DataFeed()
+        );
+        farmlyBollingerBands = _farmlyBollingerBands;
         latestLowerPrice = farmlyBollingerBands.latestLowerBand();
         latestUpperPrice = farmlyBollingerBands.latestUpperBand();
         latestTimestamp =
@@ -111,12 +126,11 @@ contract FarmlyPositionManager is
     function performUpkeep(
         bytes calldata /* performData */
     ) external override onlyForwarder {
-        collectPositionFees();
-
         int256 upperBand = farmlyBollingerBands.latestUpperBand();
         int256 lowerBand = farmlyBollingerBands.latestLowerBand();
 
         if (isUpkeepNeeded(upperBand, lowerBand)) {
+            collectPositionFees();
             uint256 timestamp = latestTimestamp + farmlyBollingerBands.period();
 
             uint128 liquidity = positionLiquidity();

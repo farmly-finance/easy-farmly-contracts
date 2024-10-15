@@ -17,10 +17,6 @@ import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
 
 contract FarmlyUniV3Executor is IERC721Receiver {
     IERC20Metadata public token0;
-    IERC20Metadata public token1;
-    uint24 public poolFee = 500;
-    uint24 public tickSpacing = 10;
-    uint256 public latestTokenId;
 
     INonfungiblePositionManager public nonfungiblePositionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
@@ -31,8 +27,11 @@ contract FarmlyUniV3Executor is IERC721Receiver {
     IUniswapV3Factory public factory =
         IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
 
-    IUniswapV3Pool public pool =
-        IUniswapV3Pool(0xC6962004f452bE9203591991D15f6b388e09E8D0);
+    IERC20Metadata public token1;
+    uint24 public poolFee;
+    uint24 public tickSpacing;
+    uint256 public latestTokenId;
+    IUniswapV3Pool public pool;
 
     struct PositionInfo {
         int24 tickLower;
@@ -49,9 +48,12 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         uint160 sqrtPriceX96;
     }
 
-    constructor() {
-        token0 = IERC20Metadata(pool.token0());
-        token1 = IERC20Metadata(pool.token1());
+    constructor(address _token0, address _token1, uint24 _poolFee) {
+        pool = IUniswapV3Pool(factory.getPool(_token0, _token1, _poolFee));
+        token0 = IERC20Metadata(_token0);
+        token1 = IERC20Metadata(_token1);
+        poolFee = _poolFee;
+        tickSpacing = uint24(pool.tickSpacing());
     }
 
     function onERC721Received(

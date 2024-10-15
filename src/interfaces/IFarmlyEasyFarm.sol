@@ -1,7 +1,7 @@
 pragma solidity ^0.8.13;
 import {IFarmlyUniV3Executor} from "./IFarmlyUniV3Executor.sol";
 
-interface IFarmlyPositionManager is IFarmlyUniV3Executor {
+interface IFarmlyEasyFarm is IFarmlyUniV3Executor {
     function token0DataFeed() external view returns (address);
 
     function token1DataFeed() external view returns (address);

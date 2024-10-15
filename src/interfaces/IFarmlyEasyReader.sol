@@ -1,11 +1,11 @@
 pragma solidity ^0.8.13;
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {IFarmlyPositionManager} from "./IFarmlyPositionManager.sol";
+import {IFarmlyEasyFarm} from "./IFarmlyEasyFarm.sol";
 
 interface IFarmlyEasyReader {
     function getPoolInfo(
-        IFarmlyPositionManager positionManager
+        IFarmlyEasyFarm farmlyEasyFarm
     )
         external
         view
@@ -17,11 +17,11 @@ interface IFarmlyEasyReader {
         );
 
     function getDataFeeds(
-        IFarmlyPositionManager positionManager
+        IFarmlyEasyFarm farmlyEasyFarm
     ) external view returns (address token0DataFeed, address token1DataFeed);
 
     function getLatest(
-        IFarmlyPositionManager positionManager
+        IFarmlyEasyFarm farmlyEasyFarm
     )
         external
         view
@@ -34,7 +34,7 @@ interface IFarmlyEasyReader {
         );
 
     function getConfig(
-        IFarmlyPositionManager positionManager
+        IFarmlyEasyFarm farmlyEasyFarm
     )
         external
         view
@@ -47,7 +47,7 @@ interface IFarmlyEasyReader {
         );
 
     function getUSDValues(
-        IFarmlyPositionManager positionManager
+        IFarmlyEasyFarm farmlyEasyFarm
     )
         external
         view
@@ -71,7 +71,7 @@ interface IFarmlyEasyReader {
     ) external view returns (uint256[] memory allowances);
 
     function getTokenPrices(
-        IFarmlyPositionManager positionManager
+        IFarmlyEasyFarm farmlyEasyFarm
     )
         external
         view
@@ -83,7 +83,7 @@ interface IFarmlyEasyReader {
         );
 
     function getSlot0(
-        IFarmlyPositionManager positionManager
+        IFarmlyEasyFarm farmlyEasyFarm
     )
         external
         view
@@ -98,7 +98,7 @@ interface IFarmlyEasyReader {
         );
 
     function shareToAmounts(
-        IFarmlyPositionManager positionManager,
+        IFarmlyEasyFarm farmlyEasyFarm,
         uint256 amount
     ) external view returns (uint256 amount0, uint256 amount1);
 }
