@@ -2,14 +2,19 @@ pragma solidity ^0.8.13;
 
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
+
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
 import "./interfaces/IFarmlyEasyFarm.sol";
+import "./interfaces/IPositionInfo.sol";
+
 import {SqrtPriceX96} from "./libraries/SqrtPriceX96.sol";
 import {FarmlyZapV3, V3PoolCallee} from "./libraries/FarmlyZapV3.sol";
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 
-contract FarmlyEasyReader {
+contract FarmlyEasyReader is IPositionInfo {
     uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
 
     function getPoolInfo(
@@ -24,10 +29,10 @@ contract FarmlyEasyReader {
             uint24 tickSpacing
         )
     {
-        token0 = farmlyEasyFarm.token0();
-        token1 = farmlyEasyFarm.token1();
-        poolFee = farmlyEasyFarm.poolFee();
-        tickSpacing = farmlyEasyFarm.tickSpacing();
+        token0 = farmlyEasyFarm.farmlyUniV3Executor().token0();
+        token1 = farmlyEasyFarm.farmlyUniV3Executor().token1();
+        poolFee = farmlyEasyFarm.farmlyUniV3Executor().poolFee();
+        tickSpacing = farmlyEasyFarm.farmlyUniV3Executor().tickSpacing();
     }
 
     function getDataFeeds(
@@ -60,7 +65,7 @@ contract FarmlyEasyReader {
             observationCardinalityNext,
             feeProtocol,
             unlocked
-        ) = farmlyEasyFarm.pool().slot0();
+        ) = farmlyEasyFarm.farmlyUniV3Executor().pool().slot0();
     }
 
     function getLatest(
@@ -80,12 +85,14 @@ contract FarmlyEasyReader {
         latestLowerPrice = farmlyEasyFarm.latestLowerPrice();
         latestPrice = SqrtPriceX96.decodeSqrtPriceX96(
             sqrtPriceX96,
-            IERC20Metadata(farmlyEasyFarm.token0()).decimals(),
-            IERC20Metadata(farmlyEasyFarm.token1()).decimals()
+            IERC20Metadata(farmlyEasyFarm.farmlyUniV3Executor().token0())
+                .decimals(),
+            IERC20Metadata(farmlyEasyFarm.farmlyUniV3Executor().token1())
+                .decimals()
         );
         latestUpperPrice = farmlyEasyFarm.latestUpperPrice();
         latestTimestamp = farmlyEasyFarm.latestTimestamp();
-        latestTokenId = farmlyEasyFarm.latestTokenId();
+        latestTokenId = farmlyEasyFarm.farmlyUniV3Executor().latestTokenId();
     }
 
     function getConfig(
@@ -96,16 +103,12 @@ contract FarmlyEasyReader {
         returns (
             uint256 positionThreshold,
             uint256 performanceFee,
-            address feeAddress,
-            address forwarderAddress,
-            uint8 decimals
+            address feeAddress
         )
     {
         positionThreshold = farmlyEasyFarm.positionThreshold();
         performanceFee = farmlyEasyFarm.performanceFee();
         feeAddress = farmlyEasyFarm.feeAddress();
-        forwarderAddress = farmlyEasyFarm.forwarderAddress();
-        decimals = farmlyEasyFarm.decimals();
     }
 
     function getUSDValues(
@@ -118,14 +121,14 @@ contract FarmlyEasyReader {
             uint256 totalUSDValue,
             uint256 positionFeesUSD,
             uint256 positionAmountsUSD,
-            uint256 balancesUSD
+            uint256 maximumCapacity
         )
     {
         sharePrice = farmlyEasyFarm.sharePrice();
         totalUSDValue = farmlyEasyFarm.totalUSDValue();
         (, , positionFeesUSD) = farmlyEasyFarm.positionFeesUSD();
         (, , positionAmountsUSD) = farmlyEasyFarm.positionAmountsUSD();
-        (, , balancesUSD) = farmlyEasyFarm.balancesUSD();
+        maximumCapacity = farmlyEasyFarm.maximumCapacity();
     }
 
     function getTokenBalances(
@@ -193,7 +196,7 @@ contract FarmlyEasyReader {
         );
 
         // Get position info
-        IFarmlyUniV3Executor.PositionInfo memory positionInfo = getPositionInfo(
+        PositionInfo memory positionInfo = getPositionInfo(
             farmlyEasyFarm,
             amount0Fee,
             amount1Fee
@@ -201,7 +204,7 @@ contract FarmlyEasyReader {
 
         // Calculate swap info and amounts
         (
-            IFarmlyUniV3Executor.SwapInfo memory swapInfo,
+            SwapInfo memory swapInfo,
             uint256 amount0Add,
             uint256 amount1Add
         ) = calculateSwapInfo(farmlyEasyFarm, positionInfo);
@@ -217,10 +220,53 @@ contract FarmlyEasyReader {
         );
     }
 
+    function positionAmounts(
+        IFarmlyEasyFarm farmlyEasyFarm
+    ) public view returns (uint256 amount0, uint256 amount1) {
+        (amount0, amount1) = farmlyEasyFarm
+            .farmlyUniV3Executor()
+            .positionAmounts();
+    }
+
+    function totalPortfolioValue(
+        IERC20[] memory farmlyEasyFarms,
+        address user
+    ) public view returns (uint256[] memory, uint256) {
+        uint256[] memory portfolio = new uint256[](farmlyEasyFarms.length);
+        uint256 tpv = 0;
+
+        for (uint256 i = 0; i < farmlyEasyFarms.length; i++) {
+            IERC20 farmlyEasyFarm = farmlyEasyFarms[i];
+            uint256 balance = farmlyEasyFarm.balanceOf(user);
+            uint256 sharePrice = IFarmlyEasyFarm(address(farmlyEasyFarm))
+                .sharePrice();
+            uint256 usdValue = FarmlyFullMath.mulDiv(balance, sharePrice, 1e18);
+
+            portfolio[i] = usdValue;
+            tpv += usdValue;
+        }
+
+        return (portfolio, tpv);
+    }
+
+    function tvl(
+        IFarmlyEasyFarm[] memory farmlyEasyFarms
+    ) public view returns (uint256) {
+        uint256 _tvl = 0;
+        for (uint256 i = 0; i < farmlyEasyFarms.length; i++) {
+            IFarmlyEasyFarm farmlyEasyFarm = farmlyEasyFarms[i];
+            _tvl += farmlyEasyFarm.totalUSDValue();
+        }
+
+        return _tvl;
+    }
+
     function calculateFees(
         IFarmlyEasyFarm farmlyEasyFarm
     ) internal view returns (uint256 amount0Fee, uint256 amount1Fee) {
-        (amount0Fee, amount1Fee) = farmlyEasyFarm.positionFees();
+        (amount0Fee, amount1Fee) = farmlyEasyFarm
+            .farmlyUniV3Executor()
+            .positionFees();
 
         amount0Fee -= FarmlyFullMath.mulDiv(
             amount0Fee,
@@ -239,12 +285,8 @@ contract FarmlyEasyReader {
         IFarmlyEasyFarm farmlyEasyFarm,
         uint256 amount0Fee,
         uint256 amount1Fee
-    )
-        internal
-        view
-        returns (IFarmlyUniV3Executor.PositionInfo memory positionInfo)
-    {
-        positionInfo = IFarmlyUniV3Executor.PositionInfo(
+    ) internal view returns (PositionInfo memory positionInfo) {
+        positionInfo = PositionInfo(
             getTick(farmlyEasyFarm, farmlyEasyFarm.latestLowerPrice()),
             getTick(farmlyEasyFarm, farmlyEasyFarm.latestUpperPrice()),
             amount0Fee,
@@ -254,24 +296,24 @@ contract FarmlyEasyReader {
 
     function calculateSwapInfo(
         IFarmlyEasyFarm farmlyEasyFarm,
-        IFarmlyUniV3Executor.PositionInfo memory positionInfo
+        PositionInfo memory positionInfo
     )
         internal
         view
         returns (
-            IFarmlyUniV3Executor.SwapInfo memory swapInfo,
+            SwapInfo memory swapInfo,
             uint256 amount0Add,
             uint256 amount1Add
         )
     {
-        (swapInfo, amount0Add, amount1Add) = farmlyEasyFarm.getAmountsForAdd(
-            positionInfo
-        );
+        (swapInfo, amount0Add, amount1Add) = farmlyEasyFarm
+            .farmlyUniV3Executor()
+            .getAmountsForAdd(positionInfo);
     }
 
     function calculateLiquidityAmounts(
-        IFarmlyUniV3Executor.SwapInfo memory swapInfo,
-        IFarmlyUniV3Executor.PositionInfo memory positionInfo,
+        SwapInfo memory swapInfo,
+        PositionInfo memory positionInfo,
         uint256 amount0Add,
         uint256 amount1Add,
         IFarmlyEasyFarm farmlyEasyFarm,
@@ -310,11 +352,15 @@ contract FarmlyEasyReader {
                 TickMath.getTickAtSqrtRatio(
                     SqrtPriceX96.encodeSqrtPriceX96(
                         price,
-                        IERC20Metadata(farmlyEasyFarm.token0()).decimals(),
-                        IERC20Metadata(farmlyEasyFarm.token1()).decimals()
+                        IERC20Metadata(
+                            farmlyEasyFarm.farmlyUniV3Executor().token0()
+                        ).decimals(),
+                        IERC20Metadata(
+                            farmlyEasyFarm.farmlyUniV3Executor().token1()
+                        ).decimals()
                     )
                 ),
-                farmlyEasyFarm.tickSpacing()
+                farmlyEasyFarm.farmlyUniV3Executor().tickSpacing()
             );
     }
 
@@ -322,7 +368,8 @@ contract FarmlyEasyReader {
         IFarmlyEasyFarm farmlyEasyFarm
     ) internal view returns (uint128 liquidity) {
         (, , , , , , , liquidity, , , , ) = farmlyEasyFarm
+            .farmlyUniV3Executor()
             .nonfungiblePositionManager()
-            .positions(farmlyEasyFarm.latestTokenId());
+            .positions(farmlyEasyFarm.farmlyUniV3Executor().latestTokenId());
     }
 }

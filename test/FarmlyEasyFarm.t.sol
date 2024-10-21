@@ -12,16 +12,13 @@ contract FarmlyEasyFarmTest is Test {
 
     function setUp() public {
         farmlyEasyFarm = new FarmlyEasyFarm(
-            tester,
-            tester,
-            500,
             "Test",
             "TEST",
-            IFarmlyBollingerBands(tester),
-            1e18
+            1e18,
+            tester,
+            tester
         );
 
-        farmlyEasyFarm.setLatestBollingers(2000 * 1e18, 2500 * 1e18);
         deal(address(farmlyEasyFarm.token0()), tester, testAmount0 * 2);
         deal(address(farmlyEasyFarm.token1()), tester, testAmount1 * 2);
 
@@ -32,7 +29,9 @@ contract FarmlyEasyFarmTest is Test {
     }
 
     function test_PositionFees() public {
-        (uint256 amount0, uint256 amount1) = farmlyEasyFarm.positionFees();
+        (uint256 amount0, uint256 amount1) = farmlyEasyFarm
+            .farmlyUniV3Executor()
+            .positionFees();
 
         console.log(amount0);
         console.log(amount1);
@@ -51,7 +50,10 @@ contract FarmlyEasyFarmTest is Test {
         farmlyEasyFarm.token0().approve(address(farmlyEasyFarm), testAmount0);
         farmlyEasyFarm.token1().approve(address(farmlyEasyFarm), testAmount1);
         farmlyEasyFarm.deposit(testAmount0, testAmount1);
-        console.log("tokenId", farmlyEasyFarm.latestTokenId());
+        console.log(
+            "tokenId",
+            farmlyEasyFarm.farmlyUniV3Executor().latestTokenId()
+        );
         console.log(
             "token0 remaining: ",
             farmlyEasyFarm.token0().balanceOf(address(farmlyEasyFarm))
@@ -68,7 +70,10 @@ contract FarmlyEasyFarmTest is Test {
         farmlyEasyFarm.token0().approve(address(farmlyEasyFarm), testAmount0);
         farmlyEasyFarm.token1().approve(address(farmlyEasyFarm), testAmount1);
         farmlyEasyFarm.deposit(testAmount0, testAmount1);
-        console.log("tokenId", farmlyEasyFarm.latestTokenId());
+        console.log(
+            "tokenId",
+            farmlyEasyFarm.farmlyUniV3Executor().latestTokenId()
+        );
         console.log(
             "token0 remaining: ",
             farmlyEasyFarm.token0().balanceOf(address(farmlyEasyFarm))
@@ -122,13 +127,16 @@ contract FarmlyEasyFarmTest is Test {
             ,
             ,
 
-        ) = farmlyEasyFarm.nonfungiblePositionManager().positions(
-                farmlyEasyFarm.latestTokenId()
-            );
+        ) = farmlyEasyFarm
+                .farmlyUniV3Executor()
+                .nonfungiblePositionManager()
+                .positions(
+                    farmlyEasyFarm.farmlyUniV3Executor().latestTokenId()
+                );
 
         console.log("liquidity: ", liquidity);
 
-        farmlyEasyFarm.withdraw(500e8);
+        farmlyEasyFarm.withdraw(500e8, false, true);
 
         console.log("share price: ", farmlyEasyFarm.sharePrice());
         console.log("total supply: ", farmlyEasyFarm.totalSupply());

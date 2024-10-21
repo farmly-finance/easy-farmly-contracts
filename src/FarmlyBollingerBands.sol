@@ -19,13 +19,7 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface, Ownable {
     uint256 public latestUpperBand;
     uint256 public latestSma;
     uint256 public latestLowerBand;
-
-    address public forwarderAddress;
-
-    modifier onlyForwarder() {
-        require(msg.sender == forwarderAddress, "NOT FORWARDER");
-        _;
-    }
+    address public farmlyBollingerBandsFactory;
 
     event NewBand(
         uint256 price,
@@ -49,6 +43,7 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface, Ownable {
         nextPeriodStartTimestamp = _startTimestamp;
         token0DataFeed = AggregatorV3Interface(_token0DataFeed);
         token1DataFeed = AggregatorV3Interface(_token1DataFeed);
+        farmlyBollingerBandsFactory = msg.sender;
     }
 
     function checkUpkeep(
@@ -57,24 +52,27 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface, Ownable {
         external
         view
         override
-        returns (bool upkeepNeeded, bytes memory performData)
+        returns (bool upkeepNeeded, bytes memory /* performData */)
     {
-        if (isUpkeepNeeded()) {
-            (uint256 token0Price, uint256 token1Price) = getPrices();
-            performData = abi.encode(
-                FarmlyFullMath.mulDiv(token0Price, 1e18, token1Price)
-            );
-            upkeepNeeded = true;
-        }
+        upkeepNeeded = isUpkeepNeeded();
     }
 
     function performUpkeep(
-        bytes calldata performData
-    ) external override onlyForwarder {
+        bytes calldata /* performData  */
+    ) external override {
         if (isUpkeepNeeded()) {
-            uint256 price = abi.decode(performData, (uint256));
+            (uint256 token0Price, uint256 token1Price) = getPrices();
+
+            uint256 price = FarmlyFullMath.mulDiv(
+                token0Price,
+                1e18,
+                token1Price
+            );
+
             prices.push(price);
+
             pricesLength++;
+
             if (prices.length >= ma) {
                 (
                     uint256 upperBand,
@@ -83,7 +81,9 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface, Ownable {
                 ) = calculateBollingerBands();
 
                 latestUpperBand = upperBand;
+
                 latestSma = sma;
+
                 latestLowerBand = lowerBand;
 
                 emit NewBand(
@@ -94,6 +94,7 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface, Ownable {
                     nextPeriodStartTimestamp
                 );
             }
+
             nextPeriodStartTimestamp += period;
         }
     }
@@ -104,18 +105,23 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface, Ownable {
 
     function calculateSMA() internal view returns (uint256) {
         uint256 sum = 0;
+
         for (uint256 i = prices.length - ma; i < prices.length; i++) {
             sum += prices[i];
         }
+
         return sum / ma;
     }
 
     function calculateStdDev(uint256 sma) internal view returns (uint256) {
         uint256 variance = 0;
+
         for (uint256 i = prices.length - ma; i < prices.length; i++) {
-            uint256 diff = prices[i] - sma;
-            variance += diff * diff;
+            int256 diff = int256(prices[i]) - int256(sma);
+
+            variance += uint256(diff * diff);
         }
+
         return FarmlyFullMath.sqrt(variance / ma);
     }
 
@@ -150,9 +156,5 @@ contract FarmlyBollingerBands is AutomationCompatibleInterface, Ownable {
             1e18,
             10 ** token1DataFeed.decimals()
         );
-    }
-
-    function setForwarder(address _forwarderAddress) public onlyOwner {
-        forwarderAddress = _forwarderAddress;
     }
 }

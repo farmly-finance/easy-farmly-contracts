@@ -8,7 +8,7 @@ contract FarmlyBollingerBandsFactoryScript is Script {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        FarmlyBollingerBandsFactory farmlyBollingerBandsFactory = new FarmlyBollingerBandsFactory();
+        new FarmlyBollingerBandsFactory();
 
         vm.stopBroadcast();
     }

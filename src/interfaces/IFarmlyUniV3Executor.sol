@@ -3,22 +3,9 @@ pragma solidity ^0.8.13;
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
 
-interface IFarmlyUniV3Executor {
-    struct PositionInfo {
-        int24 tickLower;
-        int24 tickUpper;
-        uint amount0Add;
-        uint amount1Add;
-    }
+import {IPositionInfo} from "./IPositionInfo.sol";
 
-    struct SwapInfo {
-        address tokenIn;
-        address tokenOut;
-        uint256 amountIn;
-        uint256 amountOut;
-        uint160 sqrtPriceX96;
-    }
-
+interface IFarmlyUniV3Executor is IPositionInfo {
     function token0() external view returns (address);
 
     function token1() external view returns (address);
@@ -28,24 +15,6 @@ interface IFarmlyUniV3Executor {
     function tickSpacing() external view returns (uint24);
 
     function latestTokenId() external view returns (uint256);
-
-    function onERC721Received(
-        address operator,
-        address from,
-        uint256 tokenId,
-        bytes calldata data
-    ) external returns (bytes4);
-
-    function getAmountsForAdd(
-        PositionInfo memory positionInfo
-    )
-        external
-        view
-        returns (
-            SwapInfo memory swapInfo,
-            uint256 amount0Add,
-            uint256 amount1Add
-        );
 
     function positionAmounts()
         external
@@ -63,4 +32,47 @@ interface IFarmlyUniV3Executor {
         external
         view
         returns (INonfungiblePositionManager nonfungiblePositionManager);
+
+    function getAmountsForAdd(
+        PositionInfo memory positionInfo
+    )
+        external
+        view
+        returns (
+            SwapInfo memory swapInfo,
+            uint256 amount0Add,
+            uint256 amount1Add
+        );
+
+    function onPerformUpkeep(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    )
+        external
+        returns (
+            uint256 amount0Collected,
+            uint256 amount1Collected,
+            uint256 amount0Added,
+            uint256 amount1Added
+        );
+
+    function onDeposit(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    ) external returns (uint256 amount0Collected, uint256 amount1Collected);
+
+    function onWithdraw(
+        uint256 shareAmount,
+        uint256 totalSupply,
+        address to,
+        bool isMinimizeTrading,
+        bool zeroForOne
+    )
+        external
+        returns (
+            uint256 amount0Collected,
+            uint256 amount1Collected,
+            uint256 amount0,
+            uint256 amount1
+        );
 }

@@ -31,7 +31,9 @@ contract FarmlyBollingerBandsFactory is Ownable {
             _token0DataFeed,
             _token1DataFeed
         );
+
         newBand.transferOwnership(msg.sender);
+
         farmlyBollingerBands.push(newBand);
 
         emit NewFarmlyBollingerBands(

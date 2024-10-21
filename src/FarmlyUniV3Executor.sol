@@ -1,6 +1,8 @@
 pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Math/SafeCast.sol";
 
 import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
@@ -10,12 +12,12 @@ import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@uniswap/v3-core/contracts/libraries/FixedPoint128.sol";
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 
-import {SqrtPriceX96} from "./libraries/SqrtPriceX96.sol";
+import {FarmlyTickLib} from "./libraries/FarmlyTickLib.sol";
 import {FarmlyZapV3, V3PoolCallee} from "./libraries/FarmlyZapV3.sol";
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
 
-contract FarmlyUniV3Executor is IERC721Receiver {
+contract FarmlyUniV3Executor is IERC721Receiver, Ownable {
     INonfungiblePositionManager public nonfungiblePositionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
@@ -27,9 +29,8 @@ contract FarmlyUniV3Executor is IERC721Receiver {
 
     IERC20Metadata public token0;
     IERC20Metadata public token1;
-
-    IUniswapV3Pool public pool;
     uint24 public poolFee;
+    IUniswapV3Pool public pool;
     uint24 public tickSpacing;
     uint256 public latestTokenId;
 
@@ -57,15 +58,196 @@ contract FarmlyUniV3Executor is IERC721Receiver {
     }
 
     function onERC721Received(
-        address operator,
+        address /* operator */,
         address,
-        uint256 tokenId,
+        uint256 /* tokenId */,
         bytes calldata
     ) external override returns (bytes4) {
         return this.onERC721Received.selector;
     }
 
-    function mintPosition(
+    function onPerformUpkeep(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    )
+        public
+        onlyOwner
+        returns (
+            uint256 amount0Collected,
+            uint256 amount1Collected,
+            uint256 amount0Added,
+            uint256 amount1Added
+        )
+    {
+        (amount0Collected, amount1Collected) = _collectFees();
+
+        (, , uint128 liquidity) = getPositionInfo();
+
+        _decreasePosition(liquidity);
+
+        _burnPositionToken();
+
+        (amount0Added, amount1Added) = _balanceAddLiquidity(
+            _lowerPrice,
+            _upperPrice
+        );
+
+        /* 
+        collectPositionFees
+        decreaseAllLiquidity
+        burnPositionToken
+        swapForMint
+        mintNewPosition
+        */
+    }
+
+    function onDeposit(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    )
+        public
+        onlyOwner
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
+        (amount0Collected, amount1Collected) = _collectFees();
+
+        _balanceAddLiquidity(_lowerPrice, _upperPrice);
+
+        /*
+        collectPositionFees
+        swapForMint
+
+        tokenId == 0:
+            mintNewPosition
+        else:
+            increasePosition
+         */
+    }
+
+    function onWithdraw(
+        uint256 shareAmount,
+        uint256 totalSupply,
+        address to,
+        bool isMinimizeTrading,
+        bool zeroForOne
+    )
+        public
+        onlyOwner
+        returns (
+            uint256 amount0Collected,
+            uint256 amount1Collected,
+            uint256 amount0,
+            uint256 amount1
+        )
+    {
+        (amount0Collected, amount1Collected) = _collectFees();
+
+        _balanceAddLiquidity(0, 0);
+
+        (, , uint128 liquidity) = getPositionInfo();
+
+        (amount0, amount1) = _decreasePosition(
+            SafeCast.toUint128(
+                FarmlyFullMath.mulDiv(
+                    uint256(liquidity),
+                    shareAmount,
+                    totalSupply
+                )
+            )
+        );
+
+        if (!isMinimizeTrading) {
+            SwapInfo memory swapInfo = SwapInfo(
+                zeroForOne ? address(token0) : address(token1),
+                zeroForOne ? address(token1) : address(token0),
+                zeroForOne ? amount0 : amount1,
+                0,
+                0
+            );
+
+            uint256 amountOut = _swapExactInput(swapInfo);
+
+            if (zeroForOne) {
+                amount0 = 0;
+                amount1 += amountOut;
+            } else {
+                amount0 += amountOut;
+                amount1 = 0;
+            }
+        }
+
+        if (amount0 > 0)
+            FarmlyTransferHelper.safeTransfer(address(token0), to, amount0);
+
+        if (amount1 > 0)
+            FarmlyTransferHelper.safeTransfer(address(token1), to, amount1);
+    }
+
+    function _balanceAddLiquidity(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    ) internal returns (uint256 amount0Added, uint256 amount1Added) {
+        (uint256 amount0, uint256 amount1) = tokenBalances();
+
+        bool isMint = latestTokenId == 0;
+
+        if (isMint) {
+            PositionInfo memory positionInfo = PositionInfo(
+                FarmlyTickLib.getTick(
+                    _lowerPrice,
+                    token0.decimals(),
+                    token1.decimals(),
+                    tickSpacing
+                ),
+                FarmlyTickLib.getTick(
+                    _upperPrice,
+                    token0.decimals(),
+                    token1.decimals(),
+                    tickSpacing
+                ),
+                amount0,
+                amount1
+            );
+
+            (
+                SwapInfo memory swapInfo,
+                uint256 amount0Add,
+                uint256 amount1Add
+            ) = getAmountsForAdd(positionInfo);
+
+            _swapExactInput(swapInfo);
+
+            (latestTokenId, amount0Added, amount1Added) = _mintPosition(
+                positionInfo,
+                amount0Add,
+                amount1Add
+            );
+        } else {
+            (int24 tickLower, int24 tickUpper, ) = getPositionInfo();
+
+            PositionInfo memory positionInfo = PositionInfo(
+                tickLower,
+                tickUpper,
+                amount0,
+                amount1
+            );
+
+            (
+                SwapInfo memory swapInfo,
+                uint256 amount0Add,
+                uint256 amount1Add
+            ) = getAmountsForAdd(positionInfo);
+
+            _swapExactInput(swapInfo);
+
+            (, amount0Added, amount1Added) = _increasePosition(
+                amount0Add,
+                amount1Add
+            );
+        }
+    }
+
+    function _mintPosition(
         PositionInfo memory positionInfo,
         uint256 amount0Add,
         uint256 amount1Add
@@ -84,25 +266,39 @@ contract FarmlyUniV3Executor is IERC721Receiver {
                 amount1Add
             );
 
-        INonfungiblePositionManager.MintParams
-            memory params = INonfungiblePositionManager.MintParams({
-                token0: address(token0),
-                token1: address(token1),
-                fee: poolFee,
-                tickLower: positionInfo.tickLower,
-                tickUpper: positionInfo.tickUpper,
-                amount0Desired: amount0Add,
-                amount1Desired: amount1Add,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: address(this),
-                deadline: block.timestamp
-            });
+        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
 
-        (tokenId, , amount0, amount1) = nonfungiblePositionManager.mint(params);
+        if (
+            LiquidityAmounts.getLiquidityForAmounts(
+                sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(positionInfo.tickLower),
+                TickMath.getSqrtRatioAtTick(positionInfo.tickUpper),
+                amount0Add,
+                amount1Add
+            ) > 0
+        ) {
+            INonfungiblePositionManager.MintParams
+                memory params = INonfungiblePositionManager.MintParams({
+                    token0: address(token0),
+                    token1: address(token1),
+                    fee: poolFee,
+                    tickLower: positionInfo.tickLower,
+                    tickUpper: positionInfo.tickUpper,
+                    amount0Desired: amount0Add,
+                    amount1Desired: amount1Add,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    recipient: address(this),
+                    deadline: block.timestamp
+                });
+
+            (tokenId, , amount0, amount1) = nonfungiblePositionManager.mint(
+                params
+            );
+        }
     }
 
-    function increasePosition(
+    function _increasePosition(
         uint256 amount0Add,
         uint256 amount1Add
     ) internal returns (uint128 liquidity, uint256 amount0, uint256 amount1) {
@@ -120,37 +316,35 @@ contract FarmlyUniV3Executor is IERC721Receiver {
                 amount1Add
             );
 
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            int24 tickLower,
-            int24 tickUpper,
-            ,
-            ,
-            ,
-            ,
+        (int24 tickLower, int24 tickUpper, ) = getPositionInfo();
+        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
 
-        ) = nonfungiblePositionManager.positions(latestTokenId);
+        if (
+            LiquidityAmounts.getLiquidityForAmounts(
+                sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(tickLower),
+                TickMath.getSqrtRatioAtTick(tickUpper),
+                amount0Add,
+                amount1Add
+            ) > 0
+        ) {
+            INonfungiblePositionManager.IncreaseLiquidityParams
+                memory params = INonfungiblePositionManager
+                    .IncreaseLiquidityParams({
+                        tokenId: latestTokenId,
+                        amount0Desired: amount0Add,
+                        amount1Desired: amount1Add,
+                        amount0Min: 0,
+                        amount1Min: 0,
+                        deadline: block.timestamp
+                    });
 
-        INonfungiblePositionManager.IncreaseLiquidityParams
-            memory params = INonfungiblePositionManager
-                .IncreaseLiquidityParams({
-                    tokenId: latestTokenId,
-                    amount0Desired: amount0Add,
-                    amount1Desired: amount1Add,
-                    amount0Min: 0,
-                    amount1Min: 0,
-                    deadline: block.timestamp
-                });
-
-        (liquidity, amount0, amount1) = nonfungiblePositionManager
-            .increaseLiquidity(params);
+            (liquidity, amount0, amount1) = nonfungiblePositionManager
+                .increaseLiquidity(params);
+        }
     }
 
-    function decreasePosition(
+    function _decreasePosition(
         uint128 liquidity
     ) internal returns (uint256 amount0, uint256 amount1) {
         nonfungiblePositionManager.decreaseLiquidity(
@@ -163,38 +357,32 @@ contract FarmlyUniV3Executor is IERC721Receiver {
             })
         );
 
-        (amount0, amount1) = _collect();
+        (amount0, amount1) = _collectFees();
     }
 
-    function collectFees() internal returns (uint256 amount0, uint256 amount1) {
-        (amount0, amount1) = _collect();
-    }
-
-    function burnPositionToken() internal {
+    function _burnPositionToken() internal {
         nonfungiblePositionManager.burn(latestTokenId);
         latestTokenId = 0;
     }
 
-    function swapExactInput(
-        address tokenIn,
-        address tokenOut,
-        uint amountIn
+    function _swapExactInput(
+        SwapInfo memory swapInfo
     ) internal returns (uint amountOut) {
-        if (amountIn > 0) {
+        if (swapInfo.amountIn > 0) {
             FarmlyTransferHelper.safeApprove(
-                tokenIn,
+                swapInfo.tokenIn,
                 address(swapRouter),
-                amountIn
+                swapInfo.amountIn
             );
 
             ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
                 .ExactInputSingleParams({
-                    tokenIn: tokenIn,
-                    tokenOut: tokenOut,
+                    tokenIn: swapInfo.tokenIn,
+                    tokenOut: swapInfo.tokenOut,
                     fee: poolFee,
                     recipient: address(this),
                     deadline: block.timestamp,
-                    amountIn: amountIn,
+                    amountIn: swapInfo.amountIn,
                     amountOutMinimum: 0,
                     sqrtPriceLimitX96: 0
                 });
@@ -246,15 +434,16 @@ contract FarmlyUniV3Executor is IERC721Receiver {
             : positionInfo.amount1Add - amountIn;
     }
 
-    function _collect() private returns (uint256 amount0, uint256 amount1) {
-        (amount0, amount1) = nonfungiblePositionManager.collect(
-            INonfungiblePositionManager.CollectParams(
-                latestTokenId,
-                address(this),
-                type(uint128).max,
-                type(uint128).max
-            )
-        );
+    function _collectFees() private returns (uint256 amount0, uint256 amount1) {
+        if (latestTokenId != 0)
+            (amount0, amount1) = nonfungiblePositionManager.collect(
+                INonfungiblePositionManager.CollectParams(
+                    latestTokenId,
+                    address(this),
+                    type(uint128).max,
+                    type(uint128).max
+                )
+            );
     }
 
     function positionAmounts()
@@ -262,29 +451,31 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         view
         returns (uint256 amount0, uint256 amount1)
     {
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            int24 tickLower,
-            int24 tickUpper,
-            uint128 liquidity,
-            ,
-            ,
-            ,
+        if (latestTokenId != 0) {
+            (
+                ,
+                ,
+                ,
+                ,
+                ,
+                int24 tickLower,
+                int24 tickUpper,
+                uint128 liquidity,
+                ,
+                ,
+                ,
 
-        ) = nonfungiblePositionManager.positions(latestTokenId);
+            ) = nonfungiblePositionManager.positions(latestTokenId);
 
-        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
+            (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
 
-        (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
-            sqrtPriceX96,
-            TickMath.getSqrtRatioAtTick(tickLower),
-            TickMath.getSqrtRatioAtTick(tickUpper),
-            liquidity
-        );
+            (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
+                sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(tickLower),
+                TickMath.getSqrtRatioAtTick(tickUpper),
+                liquidity
+            );
+        }
     }
 
     function positionFees()
@@ -292,41 +483,52 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         view
         returns (uint256 amount0, uint256 amount1)
     {
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            int24 tickLower,
-            int24 tickUpper,
-            uint128 liquidity,
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
-        ) = nonfungiblePositionManager.positions(latestTokenId);
+        if (latestTokenId != 0) {
+            (
+                ,
+                ,
+                ,
+                ,
+                ,
+                int24 tickLower,
+                int24 tickUpper,
+                uint128 liquidity,
+                uint256 feeGrowthInside0LastX128,
+                uint256 feeGrowthInside1LastX128,
+                uint128 tokensOwed0,
+                uint128 tokensOwed1
+            ) = nonfungiblePositionManager.positions(latestTokenId);
 
-        (
-            uint256 poolFeeGrowthInside0LastX128,
-            uint256 poolFeeGrowthInside1LastX128
-        ) = getFeeGrowthInside(tickLower, tickUpper);
+            (
+                uint256 poolFeeGrowthInside0LastX128,
+                uint256 poolFeeGrowthInside1LastX128
+            ) = getFeeGrowthInside(tickLower, tickUpper);
 
-        amount0 =
-            FarmlyFullMath.mulDiv(
-                poolFeeGrowthInside0LastX128 - feeGrowthInside0LastX128,
-                liquidity,
-                FixedPoint128.Q128
-            ) +
-            tokensOwed0;
+            amount0 =
+                FarmlyFullMath.mulDiv(
+                    poolFeeGrowthInside0LastX128 - feeGrowthInside0LastX128,
+                    liquidity,
+                    FixedPoint128.Q128
+                ) +
+                tokensOwed0;
 
-        amount1 =
-            FarmlyFullMath.mulDiv(
-                poolFeeGrowthInside1LastX128 - feeGrowthInside1LastX128,
-                liquidity,
-                FixedPoint128.Q128
-            ) +
-            tokensOwed1;
+            amount1 =
+                FarmlyFullMath.mulDiv(
+                    poolFeeGrowthInside1LastX128 - feeGrowthInside1LastX128,
+                    liquidity,
+                    FixedPoint128.Q128
+                ) +
+                tokensOwed1;
+        }
+    }
+
+    function tokenBalances()
+        public
+        view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        amount0 = IERC20(token0).balanceOf(address(this));
+        amount1 = IERC20(token1).balanceOf(address(this));
     }
 
     function getFeeGrowthInside(
@@ -407,31 +609,25 @@ contract FarmlyUniV3Executor is IERC721Receiver {
         }
     }
 
-    function getTick(uint256 price) internal view returns (int24) {
-        return
-            SqrtPriceX96.nearestUsableTick(
-                TickMath.getTickAtSqrtRatio(
-                    SqrtPriceX96.encodeSqrtPriceX96(
-                        price,
-                        token0.decimals(),
-                        token1.decimals()
-                    )
-                ),
-                tickSpacing
-            );
-    }
+    function getPositionInfo()
+        internal
+        view
+        returns (int24 tickLower, int24 tickUpper, uint128 liquidity)
+    {
+        if (latestTokenId != 0)
+            (
+                ,
+                ,
+                ,
+                ,
+                ,
+                tickLower,
+                tickUpper,
+                liquidity,
+                ,
+                ,
+                ,
 
-    function decodeTick(int24 tick) internal view returns (uint256) {
-        return
-            SqrtPriceX96.decodeSqrtPriceX96(
-                TickMath.getSqrtRatioAtTick(tick),
-                token0.decimals(),
-                token1.decimals()
-            );
-    }
-
-    function positionLiquidity() internal view returns (uint128 liquidity) {
-        (, , , , , , , liquidity, , , , ) = nonfungiblePositionManager
-            .positions(latestTokenId);
+            ) = nonfungiblePositionManager.positions(latestTokenId);
     }
 }
