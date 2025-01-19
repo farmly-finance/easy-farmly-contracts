@@ -31,7 +31,7 @@ interface IFarmlyBaseStrategy {
     function uniswapPool() external view returns (address);
     /// @notice Is rebalance needed
     function isRebalanceNeeded(
-        uint256 _upperPrice,
-        uint256 _lowerPrice
+        uint256 _lowerPrice,
+        uint256 _upperPrice
     ) external view returns (bool);
 }

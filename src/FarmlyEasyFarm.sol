@@ -15,6 +15,8 @@ contract FarmlyEasyFarm is
     IFarmlyEasyFarm,
     ERC20
 {
+    /// @notice Maximum capacity reached
+    error MaximumCapacityReached();
     /// @notice Not upkeep needed
     error NotUpkeepNeeded();
     /// @notice Price base
@@ -79,31 +81,66 @@ contract FarmlyEasyFarm is
         bytes calldata /* checkData */
     ) external view returns (bool upkeepNeeded, bytes memory performData) {
         upkeepNeeded = strategy.isRebalanceNeeded(
-            latestUpperPrice,
-            latestLowerPrice
+            latestLowerPrice,
+            latestUpperPrice
         );
     }
 
     function performUpkeep(bytes calldata performData) external override {
-        if (!strategy.isRebalanceNeeded(latestUpperPrice, latestLowerPrice)) {
+        if (!strategy.isRebalanceNeeded(latestLowerPrice, latestUpperPrice)) {
             revert NotUpkeepNeeded();
         }
 
-        executor.onRebalance();
+        latestUpperPrice = strategy.latestUpperPrice();
+        latestLowerPrice = strategy.latestLowerPrice();
+
+        executor.onRebalance(latestLowerPrice, latestUpperPrice);
     }
 
     function deposit(uint256 _amount0, uint256 _amount1) external override {
         uint256 totalSupplyBefore = totalSupply();
+        uint256 totalUSDBefore = totalUSDValue();
+
+        (, , uint256 userDepositUSD) = tokensUSDValue(_amount0, _amount1);
+
+        if (totalUSDBefore + userDepositUSD > maximumCapacity) {
+            revert MaximumCapacityReached();
+        }
 
         if (_amount0 > 0)
             token0.transferFrom(msg.sender, address(executor), _amount0);
         if (_amount1 > 0)
             token1.transferFrom(msg.sender, address(executor), _amount1);
 
-        executor.onDeposit(_amount0, _amount1);
+        executor.onDeposit(latestLowerPrice, latestUpperPrice);
+
+        uint256 shareAmount = totalSupplyBefore == 0
+            ? userDepositUSD
+            : FarmlyFullMath.mulDiv(
+                userDepositUSD,
+                totalSupplyBefore,
+                totalUSDBefore
+            );
+
+        _mint(msg.sender, shareAmount);
+
+        emit Deposit(_amount0, _amount1, shareAmount, userDepositUSD);
     }
 
-    function withdraw(uint256 _amount) external override {}
+    function withdraw(
+        uint256 _amount,
+        bool _isMinimizeTrading,
+        bool _zeroForOne
+    ) external override {
+        uint256 totalSupplyBefore = totalSupply();
+        uint256 totalUSDBefore = totalUSDValue();
+
+        _burn(msg.sender, _amount);
+
+        executor.onWithdraw(_amount);
+
+        emit Withdraw(0, 0, _amount, totalUSDBefore);
+    }
 
     function latestTokenPrices()
         public
@@ -126,7 +163,32 @@ contract FarmlyEasyFarm is
         );
     }
 
-    function totalUSDValue() public view returns (uint256) {}
+    function totalUSDValue() public view returns (uint256 usdValue) {
+        (, , uint256 positionFeesTotal) = positionFeesUSD();
+        (, , uint256 positionUSD) = positionAmountsUSD();
+
+        usdValue = positionUSD + positionFeesTotal;
+    }
+
+    function positionFeesUSD()
+        public
+        view
+        returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD)
+    {
+        (uint256 amount0, uint256 amount1) = executor.positionFees();
+
+        (amount0USD, amount1USD, totalUSD) = tokensUSDValue(amount0, amount1);
+    }
+
+    function positionAmountsUSD()
+        public
+        view
+        returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD)
+    {
+        (uint256 amount0, uint256 amount1) = executor.positionAmounts();
+
+        (amount0USD, amount1USD, totalUSD) = tokensUSDValue(amount0, amount1);
+    }
 
     function tokensUSDValue(
         uint256 _amount0,

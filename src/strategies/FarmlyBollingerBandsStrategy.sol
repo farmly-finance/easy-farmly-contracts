@@ -41,8 +41,8 @@ contract FarmlyBollingerBandsStrategy is
 
     /// @notice Is rebalance needed
     function isRebalanceNeeded(
-        uint256 _upperPrice,
-        uint256 _lowerPrice
+        uint256 _lowerPrice,
+        uint256 _upperPrice
     ) external view override returns (bool) {
         uint256 upperThreshold = FarmlyFullMath.mulDiv(
             _upperPrice,
@@ -64,6 +64,10 @@ contract FarmlyBollingerBandsStrategy is
             (latestLowerPrice > _lowerPrice + lowerThreshold);
 
         return upperRebalanceNeeded || lowerRebalanceNeeded;
+    }
+
+    function isUpkeepNeeded() internal view returns (bool) {
+        return block.timestamp >= nextPeriodStartTimestamp;
     }
 
     function checkUpkeep(
@@ -165,10 +169,6 @@ contract FarmlyBollingerBandsStrategy is
 
         upperBand = sma + (STD * stdDev);
         lowerBand = sma - (STD * stdDev);
-    }
-
-    function isUpkeepNeeded() internal view returns (bool) {
-        return block.timestamp >= nextPeriodStartTimestamp;
     }
 
     /// @notice Prices length

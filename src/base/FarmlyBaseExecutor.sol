@@ -6,7 +6,28 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor {
     error NotImplemented();
 
     /// @inheritdoc IFarmlyBaseExecutor
-    function onRebalance() external virtual {
+    function positionAmounts()
+        external
+        view
+        virtual
+        returns (uint256 amount0, uint256 amount1)
+    {
+        revert NotImplemented();
+    }
+    /// @inheritdoc IFarmlyBaseExecutor
+    function positionFees()
+        external
+        view
+        virtual
+        returns (uint256 amount0, uint256 amount1)
+    {
+        revert NotImplemented();
+    }
+    /// @inheritdoc IFarmlyBaseExecutor
+    function onRebalance(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    ) external virtual {
         revert NotImplemented();
     }
     /// @inheritdoc IFarmlyBaseExecutor

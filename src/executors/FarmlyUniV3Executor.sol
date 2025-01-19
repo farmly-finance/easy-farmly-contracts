@@ -5,13 +5,17 @@ import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.s
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
+import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
+import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
+import "@uniswap/v3-core/contracts/libraries/FixedPoint128.sol";
+
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IFarmlyBaseExecutor} from "../interfaces/base/IFarmlyBaseExecutor.sol";
 import {FarmlyBaseExecutor} from "../base/FarmlyBaseExecutor.sol";
 import {FarmlyZapV3, V3PoolCallee} from "../libraries/FarmlyZapV3.sol";
 import {FarmlyTickLib} from "../libraries/FarmlyTickLib.sol";
 import {FarmlyTransferHelper} from "../libraries/FarmlyTransferHelper.sol";
-
+import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
 contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     /// @notice Position
     struct Position {
@@ -66,7 +70,91 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     }
 
     /// @inheritdoc IFarmlyBaseExecutor
-    function onRebalance() external override {}
+    function positionAmounts()
+        external
+        view
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
+        if (latestTokenId == 0) {
+            (
+                int24 tickLower,
+                int24 tickUpper,
+                uint128 liquidity
+            ) = positionInfo();
+
+            (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
+
+            (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
+                sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(tickLower),
+                TickMath.getSqrtRatioAtTick(tickUpper),
+                liquidity
+            );
+        }
+    }
+
+    /// @inheritdoc IFarmlyBaseExecutor
+    function positionFees()
+        external
+        view
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
+        if (latestTokenId != 0) {
+            (
+                ,
+                ,
+                ,
+                ,
+                ,
+                int24 tickLower,
+                int24 tickUpper,
+                uint128 liquidity,
+                uint256 feeGrowthInside0LastX128,
+                uint256 feeGrowthInside1LastX128,
+                uint128 tokensOwed0,
+                uint128 tokensOwed1
+            ) = nonfungiblePositionManager.positions(latestTokenId);
+
+            (
+                uint256 poolFeeGrowthInside0LastX128,
+                uint256 poolFeeGrowthInside1LastX128
+            ) = feeGrowthInside(tickLower, tickUpper);
+
+            amount0 =
+                FarmlyFullMath.mulDiv(
+                    poolFeeGrowthInside0LastX128 - feeGrowthInside0LastX128,
+                    liquidity,
+                    FixedPoint128.Q128
+                ) +
+                tokensOwed0;
+
+            amount1 =
+                FarmlyFullMath.mulDiv(
+                    poolFeeGrowthInside1LastX128 - feeGrowthInside1LastX128,
+                    liquidity,
+                    FixedPoint128.Q128
+                ) +
+                tokensOwed1;
+        }
+    }
+
+    /// @inheritdoc IFarmlyBaseExecutor
+    function onRebalance(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    ) external override {
+        collectFees();
+
+        (, , uint128 liquidity) = positionInfo();
+
+        decreasePosition(liquidity);
+
+        burnPositionToken();
+
+        addBalanceLiquidity(_lowerPrice, _upperPrice);
+    }
     /// @inheritdoc IFarmlyBaseExecutor
     function onDeposit(
         uint256 _lowerPrice,
@@ -75,7 +163,15 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
         addBalanceLiquidity(_lowerPrice, _upperPrice);
     }
     /// @inheritdoc IFarmlyBaseExecutor
-    function onWithdraw(uint256 _amount) external override {}
+    function onWithdraw(uint256 _amount) external override {
+        collectFees();
+
+        addBalanceLiquidity(0, 0);
+
+        (, , uint128 liquidity) = positionInfo();
+
+        decreasePosition(liquidity);
+    }
 
     /// @notice Add balance liquidity
     /// @param _lowerPrice Lower price
@@ -180,6 +276,26 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
             .increaseLiquidity(params);
     }
 
+    /// @notice Decrease position
+    /// @param _liquidity Liquidity
+    /// @return amount0 Amount 0
+    /// @return amount1 Amount 1
+    function decreasePosition(
+        uint128 _liquidity
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        nonfungiblePositionManager.decreaseLiquidity(
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: latestTokenId,
+                liquidity: _liquidity,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: block.timestamp
+            })
+        );
+
+        (amount0, amount1) = collectFees();
+    }
+
     /// @notice Mint position
     /// @param _position Position
     /// @param _amount0 Amount 0
@@ -252,6 +368,30 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
                 });
 
             amountOut = swapRouter.exactInputSingle(params);
+        }
+    }
+
+    /// @notice Collect fees
+    /// @return amount0 Amount 0
+    /// @return amount1 Amount 1
+    function collectFees() internal returns (uint256 amount0, uint256 amount1) {
+        if (latestTokenId != 0) {
+            (amount0, amount1) = nonfungiblePositionManager.collect(
+                INonfungiblePositionManager.CollectParams({
+                    tokenId: latestTokenId,
+                    recipient: address(this),
+                    amount0Max: type(uint128).max,
+                    amount1Max: type(uint128).max
+                })
+            );
+        }
+    }
+
+    /// @notice Burn position token
+    function burnPositionToken() internal {
+        if (latestTokenId != 0) {
+            nonfungiblePositionManager.burn(latestTokenId);
+            latestTokenId = 0;
         }
     }
 
@@ -330,5 +470,88 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     {
         amount0 = token0.balanceOf(address(this));
         amount1 = token1.balanceOf(address(this));
+    }
+
+    /// @notice Fee growth inside
+    /// @param tickLower Tick lower
+    /// @param tickUpper Tick upper
+    /// @return feeGrowthInside0X128 Fee growth inside 0X128
+    /// @return feeGrowthInside1X128 Fee growth inside 1X128
+    function feeGrowthInside(
+        int24 tickLower,
+        int24 tickUpper
+    )
+        internal
+        view
+        returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128)
+    {
+        (, int24 tick, , , , , ) = pool.slot0();
+
+        (
+            ,
+            ,
+            uint256 lowerFeeGrowthOutside0X128,
+            uint256 lowerFeeGrowthOutside1X128,
+            ,
+            ,
+            ,
+
+        ) = pool.ticks(tickLower);
+        (
+            ,
+            ,
+            uint256 upperFeeGrowthOutside0X128,
+            uint256 upperFeeGrowthOutside1X128,
+            ,
+            ,
+            ,
+
+        ) = pool.ticks(tickUpper);
+
+        uint256 feeGrowthGlobal0X128 = pool.feeGrowthGlobal0X128();
+        uint256 feeGrowthGlobal1X128 = pool.feeGrowthGlobal1X128();
+
+        uint256 feeGrowthBelow0X128;
+        uint256 feeGrowthBelow1X128;
+        if (tick >= tickLower) {
+            feeGrowthBelow0X128 = lowerFeeGrowthOutside0X128;
+            feeGrowthBelow1X128 = lowerFeeGrowthOutside1X128;
+        } else {
+            unchecked {
+                feeGrowthBelow0X128 =
+                    feeGrowthGlobal0X128 -
+                    lowerFeeGrowthOutside0X128;
+                feeGrowthBelow1X128 =
+                    feeGrowthGlobal1X128 -
+                    lowerFeeGrowthOutside1X128;
+            }
+        }
+
+        uint256 feeGrowthAbove0X128;
+        uint256 feeGrowthAbove1X128;
+        if (tick < tickUpper) {
+            feeGrowthAbove0X128 = upperFeeGrowthOutside0X128;
+            feeGrowthAbove1X128 = upperFeeGrowthOutside1X128;
+        } else {
+            unchecked {
+                feeGrowthAbove0X128 =
+                    feeGrowthGlobal0X128 -
+                    upperFeeGrowthOutside0X128;
+                feeGrowthAbove1X128 =
+                    feeGrowthGlobal1X128 -
+                    upperFeeGrowthOutside1X128;
+            }
+        }
+
+        unchecked {
+            feeGrowthInside0X128 =
+                feeGrowthGlobal0X128 -
+                feeGrowthBelow0X128 -
+                feeGrowthAbove0X128;
+            feeGrowthInside1X128 =
+                feeGrowthGlobal1X128 -
+                feeGrowthBelow1X128 -
+                feeGrowthAbove1X128;
+        }
     }
 }

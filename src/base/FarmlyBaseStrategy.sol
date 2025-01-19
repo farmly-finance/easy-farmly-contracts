@@ -22,8 +22,8 @@ abstract contract FarmlyBaseStrategy is IFarmlyBaseStrategy {
 
     /// @inheritdoc IFarmlyBaseStrategy
     function isRebalanceNeeded(
-        uint256 _upperPrice,
-        uint256 _lowerPrice
+        uint256 _lowerPrice,
+        uint256 _upperPrice
     ) external view virtual returns (bool) {
         revert NotImplemented();
     }
