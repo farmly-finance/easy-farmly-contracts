@@ -1,7 +1,7 @@
 pragma solidity ^0.8.13;
 
-import {IFarmlyBaseStrategy} from "./IFarmlyBaseStrategy.sol";
-import {IFarmlyBaseExecutor} from "./IFarmlyBaseExecutor.sol";
+import {IFarmlyBaseStrategy} from "./base/IFarmlyBaseStrategy.sol";
+import {IFarmlyBaseExecutor} from "./base/IFarmlyBaseExecutor.sol";
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 interface IFarmlyEasyFarm {
@@ -31,6 +31,21 @@ interface IFarmlyEasyFarm {
     function token0() external view returns (IERC20);
     /// @notice Token 1
     function token1() external view returns (IERC20);
+    /// @notice Token 0 decimals
+    function token0Decimals() external view returns (uint8);
+    /// @notice Token 1 decimals
+    function token1Decimals() external view returns (uint8);
+    /// @notice Total USD value of easy farm
+    function totalUSDValue() external view returns (uint256);
+
+    /// @notice Deposit
+    /// @param _amount0 Amount of token 0
+    /// @param _amount1 Amount of token 1
+    function deposit(uint256 _amount0, uint256 _amount1) external;
+    /// @notice Withdraw
+    /// @param _amount Amount of shares
+    function withdraw(uint256 _amount) external;
+
     /// @notice Deposit event
     event Deposit(
         uint256 amount0,
