@@ -1,6 +1,6 @@
 pragma solidity ^0.8.13;
 
-import {IFarmlyBaseStrategy} from "../interfaces/IFarmlyBaseStrategy.sol";
+import {IFarmlyBaseStrategy} from "../interfaces/base/IFarmlyBaseStrategy.sol";
 import {IUniV3Reader} from "../interfaces/IUniV3Reader.sol";
 
 abstract contract FarmlyBaseStrategy is IFarmlyBaseStrategy {
@@ -19,6 +19,14 @@ abstract contract FarmlyBaseStrategy is IFarmlyBaseStrategy {
 
     /// @notice NotImplemented error
     error NotImplemented();
+
+    /// @inheritdoc IFarmlyBaseStrategy
+    function isRebalanceNeeded(
+        uint256 _upperPrice,
+        uint256 _lowerPrice
+    ) external view virtual returns (bool) {
+        revert NotImplemented();
+    }
 
     /*
     /// @inheritdoc IFarmlyBaseStrategy
