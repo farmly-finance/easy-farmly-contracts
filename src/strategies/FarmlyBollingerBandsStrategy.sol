@@ -4,12 +4,15 @@ import {FarmlyBaseStrategy} from "../base/FarmlyBaseStrategy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
-
+import {FarmlyTickLib} from "../libraries/FarmlyTickLib.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 contract FarmlyBollingerBandsStrategy is
     FarmlyBaseStrategy,
     AutomationCompatibleInterface,
     Ownable
 {
+    /// @notice Threshold denominator
+    uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
     /// @notice Not upkeep needed error
     error NotUpkeepNeeded();
     /// @notice Moving average period
@@ -24,6 +27,8 @@ contract FarmlyBollingerBandsStrategy is
     uint256 public nextPeriodStartTimestamp;
     /// @notice Latest mid price
     uint256 public latestMidPrice;
+    /// @notice Rebalance threshold
+    uint256 public rebalanceThreshold;
 
     /// @notice New bands event
     event NewBands(
@@ -33,6 +38,33 @@ contract FarmlyBollingerBandsStrategy is
         uint256 midBand,
         uint256 timestamp
     );
+
+    /// @notice Is rebalance needed
+    function isRebalanceNeeded(
+        uint256 _upperPrice,
+        uint256 _lowerPrice
+    ) external view override returns (bool) {
+        uint256 upperThreshold = FarmlyFullMath.mulDiv(
+            _upperPrice,
+            rebalanceThreshold,
+            THRESHOLD_DENOMINATOR
+        );
+        uint256 lowerThreshold = FarmlyFullMath.mulDiv(
+            _lowerPrice,
+            rebalanceThreshold,
+            THRESHOLD_DENOMINATOR
+        );
+
+        bool upperRebalanceNeeded = (latestUpperPrice <
+            _upperPrice - upperThreshold) ||
+            (latestUpperPrice > _upperPrice + upperThreshold);
+
+        bool lowerRebalanceNeeded = (latestLowerPrice <
+            _lowerPrice - lowerThreshold) ||
+            (latestLowerPrice > _lowerPrice + lowerThreshold);
+
+        return upperRebalanceNeeded || lowerRebalanceNeeded;
+    }
 
     function checkUpkeep(
         bytes calldata /* checkData */
@@ -49,27 +81,57 @@ contract FarmlyBollingerBandsStrategy is
         prices.push(price);
 
         if (prices.length >= MA) {
-            (
-                uint256 upperBand,
-                uint256 sma,
-                uint256 lowerBand
-            ) = calculateBollingerBands();
-
-            latestLowerPrice = lowerBand;
-            latestUpperPrice = upperBand;
-            latestMidPrice = sma;
-            latestTimestamp = block.timestamp;
+            updateBands();
 
             emit NewBands(
                 price,
-                lowerBand,
-                upperBand,
-                sma,
+                latestLowerPrice,
+                latestUpperPrice,
+                latestMidPrice,
                 nextPeriodStartTimestamp
             );
         }
 
         nextPeriodStartTimestamp += PERIOD;
+    }
+
+    function updateBands() internal {
+        (
+            uint256 upperBand,
+            uint256 sma,
+            uint256 lowerBand
+        ) = calculateBollingerBands();
+
+        (
+            address token0,
+            address token1,
+            uint24 fee,
+            int24 tickSpacing
+        ) = uniV3Reader.getPoolInfo(uniswapPool);
+
+        uint8 token0Decimals = IERC20Metadata(token0).decimals();
+        uint8 token1Decimals = IERC20Metadata(token1).decimals();
+
+        latestLowerPrice = FarmlyTickLib.nearestPrice(
+            lowerBand,
+            token0Decimals,
+            token1Decimals,
+            uint24(tickSpacing)
+        );
+        latestUpperPrice = FarmlyTickLib.nearestPrice(
+            upperBand,
+            token0Decimals,
+            token1Decimals,
+            uint24(tickSpacing)
+        );
+        latestMidPrice = FarmlyTickLib.nearestPrice(
+            sma,
+            token0Decimals,
+            token1Decimals,
+            uint24(tickSpacing)
+        );
+
+        latestTimestamp = nextPeriodStartTimestamp;
     }
 
     function calculateSMA() internal view returns (uint256) {
