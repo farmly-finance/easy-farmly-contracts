@@ -1,6 +1,6 @@
 pragma solidity ^0.8.13;
 
-import {IUniV3Reader} from "./IUniV3Reader.sol";
+import {IUniV3Reader} from "../IUniV3Reader.sol";
 interface IFarmlyBaseStrategy {
     /*
     /// @notice Called before rebalance
@@ -29,4 +29,9 @@ interface IFarmlyBaseStrategy {
     function uniV3Reader() external view returns (IUniV3Reader);
     /// @notice Uniswap pool
     function uniswapPool() external view returns (address);
+    /// @notice Is rebalance needed
+    function isRebalanceNeeded(
+        uint256 _upperPrice,
+        uint256 _lowerPrice
+    ) external view returns (bool);
 }
