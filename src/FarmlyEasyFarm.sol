@@ -147,27 +147,6 @@ contract FarmlyEasyFarm is
         emit Withdraw(0, 0, _amount, totalUSDBefore);
     }
 
-    function latestTokenPrices()
-        public
-        view
-        returns (uint256 token0Price, uint256 token1Price)
-    {
-        (, int256 token0Answer, , , ) = token0DataFeed.latestRoundData();
-        (, int256 token1Answer, , , ) = token1DataFeed.latestRoundData();
-
-        token0Price = FarmlyFullMath.mulDiv(
-            uint256(token0Answer),
-            PRICE_BASE,
-            10 ** token0DataFeed.decimals()
-        );
-
-        token1Price = FarmlyFullMath.mulDiv(
-            uint256(token1Answer),
-            PRICE_BASE,
-            10 ** token1DataFeed.decimals()
-        );
-    }
-
     function totalUSDValue() public view returns (uint256 usdValue) {
         (, , uint256 positionFeesTotal) = positionFeesUSD();
         (, , uint256 positionUSD) = positionAmountsUSD();
@@ -203,7 +182,7 @@ contract FarmlyEasyFarm is
         view
         returns (uint256 token0USD, uint256 token1USD, uint256 totalUSD)
     {
-        (uint256 token0Price, uint256 token1Price) = latestTokenPrices();
+        (uint256 token0Price, uint256 token1Price) = _tokenPrices();
 
         token0USD = FarmlyFullMath.mulDiv(
             _amount0,
