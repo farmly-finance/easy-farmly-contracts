@@ -16,6 +16,7 @@ import {FarmlyZapV3, V3PoolCallee} from "../libraries/FarmlyZapV3.sol";
 import {FarmlyTickLib} from "../libraries/FarmlyTickLib.sol";
 import {FarmlyTransferHelper} from "../libraries/FarmlyTransferHelper.sol";
 import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     /// @notice Position
     struct Position {
@@ -144,8 +145,12 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     function onRebalance(
         uint256 _lowerPrice,
         uint256 _upperPrice
-    ) external override {
-        collectFees();
+    )
+        external
+        override
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
+        (amount0Collected, amount1Collected) = collectFees();
 
         (, , uint128 liquidity) = positionInfo();
 
@@ -159,18 +164,68 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     function onDeposit(
         uint256 _lowerPrice,
         uint256 _upperPrice
-    ) external override {
+    )
+        external
+        override
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
+        (amount0Collected, amount1Collected) = collectFees();
+
         addBalanceLiquidity(_lowerPrice, _upperPrice);
     }
     /// @inheritdoc IFarmlyBaseExecutor
-    function onWithdraw(uint256 _amount) external override {
-        collectFees();
+    function onWithdraw(
+        uint256 _amount,
+        address _to,
+        bool _isMinimizeTrading,
+        bool _zeroForOne
+    )
+        external
+        override
+        returns (
+            uint256 amount0Collected,
+            uint256 amount1Collected,
+            uint256 amount0,
+            uint256 amount1
+        )
+    {
+        (amount0Collected, amount1Collected) = collectFees();
 
         addBalanceLiquidity(0, 0);
 
         (, , uint128 liquidity) = positionInfo();
 
-        decreasePosition(liquidity);
+        (amount0, amount1) = decreasePosition(
+            SafeCast.toUint128(FarmlyFullMath.mulDiv(_amount, liquidity, 1e18))
+        );
+
+        if (!_isMinimizeTrading) {
+            Swap memory swap = Swap(
+                _zeroForOne ? address(token0) : address(token1),
+                _zeroForOne ? address(token1) : address(token0),
+                _zeroForOne ? amount0 : amount1,
+                0,
+                0
+            );
+
+            uint256 amountOut = swapExactInput(swap);
+
+            if (_zeroForOne) {
+                amount0 = 0;
+                amount1 = amountOut;
+            } else {
+                amount0 = amountOut;
+                amount1 = 0;
+            }
+        }
+
+        if (amount0 > 0) {
+            FarmlyTransferHelper.safeTransfer(address(token0), _to, amount0);
+        }
+
+        if (amount1 > 0) {
+            FarmlyTransferHelper.safeTransfer(address(token1), _to, amount1);
+        }
     }
 
     /// @notice Add balance liquidity

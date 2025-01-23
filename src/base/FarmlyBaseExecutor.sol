@@ -27,18 +27,40 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor {
     function onRebalance(
         uint256 _lowerPrice,
         uint256 _upperPrice
-    ) external virtual {
+    )
+        external
+        virtual
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
         revert NotImplemented();
     }
     /// @inheritdoc IFarmlyBaseExecutor
     function onDeposit(
         uint256 _lowerPrice,
         uint256 _upperPrice
-    ) external virtual {
+    )
+        external
+        virtual
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
         revert NotImplemented();
     }
     /// @inheritdoc IFarmlyBaseExecutor
-    function onWithdraw(uint256 _amount) external virtual {
+    function onWithdraw(
+        uint256 _amount,
+        address _to,
+        bool _isMinimizeTrading,
+        bool _zeroForOne
+    )
+        external
+        virtual
+        returns (
+            uint256 amount0Collected,
+            uint256 amount1Collected,
+            uint256 amount0,
+            uint256 amount1
+        )
+    {
         revert NotImplemented();
     }
 }
