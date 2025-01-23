@@ -4,8 +4,7 @@ import {FarmlyBaseStrategy} from "../base/FarmlyBaseStrategy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
-import {FarmlyTickLib} from "../libraries/FarmlyTickLib.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
 contract FarmlyBollingerBandsStrategy is
     FarmlyBaseStrategy,
     AutomationCompatibleInterface,
@@ -39,6 +38,14 @@ contract FarmlyBollingerBandsStrategy is
         uint256 timestamp
     );
 
+    /// @notice Constructor
+    /// @param _token0DataFeed Token 0 data feed
+    /// @param _token1DataFeed Token 1 data feed
+    constructor(
+        address _token0DataFeed,
+        address _token1DataFeed
+    ) FarmlyBaseStrategy(_token0DataFeed, _token1DataFeed) {}
+
     /// @notice Is rebalance needed
     function isRebalanceNeeded(
         uint256 _lowerPrice,
@@ -66,29 +73,33 @@ contract FarmlyBollingerBandsStrategy is
         return upperRebalanceNeeded || lowerRebalanceNeeded;
     }
 
+    /// @notice Is upkeep needed
     function isUpkeepNeeded() internal view returns (bool) {
         return block.timestamp >= nextPeriodStartTimestamp;
     }
 
+    /// @notice Check upkeep
     function checkUpkeep(
         bytes calldata /* checkData */
     ) external view returns (bool upkeepNeeded, bytes memory performData) {
         upkeepNeeded = isUpkeepNeeded();
     }
 
+    /// @notice Perform upkeep
     function performUpkeep(bytes calldata performData) external override {
         if (!isUpkeepNeeded()) {
             revert NotUpkeepNeeded();
         }
 
-        uint256 price = uniV3Reader.getPriceE18(uniswapPool);
-        prices.push(price);
+        _setLatestPrice();
+
+        prices.push(latestPrice);
 
         if (prices.length >= MA) {
             updateBands();
 
             emit NewBands(
-                price,
+                latestPrice,
                 latestLowerPrice,
                 latestUpperPrice,
                 latestMidPrice,
@@ -99,6 +110,7 @@ contract FarmlyBollingerBandsStrategy is
         nextPeriodStartTimestamp += PERIOD;
     }
 
+    /// @notice Update bands
     function updateBands() internal {
         (
             uint256 upperBand,
@@ -106,38 +118,14 @@ contract FarmlyBollingerBandsStrategy is
             uint256 lowerBand
         ) = calculateBollingerBands();
 
-        (
-            address token0,
-            address token1,
-            uint24 fee,
-            int24 tickSpacing
-        ) = uniV3Reader.getPoolInfo(uniswapPool);
-
-        uint8 token0Decimals = IERC20Metadata(token0).decimals();
-        uint8 token1Decimals = IERC20Metadata(token1).decimals();
-
-        latestLowerPrice = FarmlyTickLib.nearestPrice(
-            lowerBand,
-            token0Decimals,
-            token1Decimals,
-            uint24(tickSpacing)
-        );
-        latestUpperPrice = FarmlyTickLib.nearestPrice(
-            upperBand,
-            token0Decimals,
-            token1Decimals,
-            uint24(tickSpacing)
-        );
-        latestMidPrice = FarmlyTickLib.nearestPrice(
-            sma,
-            token0Decimals,
-            token1Decimals,
-            uint24(tickSpacing)
-        );
+        latestUpperPrice = upperBand;
+        latestLowerPrice = lowerBand;
+        latestMidPrice = sma;
 
         latestTimestamp = nextPeriodStartTimestamp;
     }
 
+    /// @notice Calculate SMA
     function calculateSMA() internal view returns (uint256) {
         uint256 sum = 0;
 
@@ -148,6 +136,7 @@ contract FarmlyBollingerBandsStrategy is
         return sum / MA;
     }
 
+    /// @notice Calculate standard deviation
     function calculateStdDev(uint256 sma) internal view returns (uint256) {
         uint256 variance = 0;
 
@@ -159,6 +148,7 @@ contract FarmlyBollingerBandsStrategy is
         return FarmlyFullMath.sqrt(variance / MA);
     }
 
+    /// @notice Calculate Bollinger bands
     function calculateBollingerBands()
         internal
         view

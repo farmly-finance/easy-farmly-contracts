@@ -1,24 +1,31 @@
 pragma solidity ^0.8.13;
 
 import {IFarmlyBaseStrategy} from "../interfaces/base/IFarmlyBaseStrategy.sol";
-import {IUniV3Reader} from "../interfaces/IUniV3Reader.sol";
+import {FarmlyPriceFeedLib} from "../libraries/FarmlyPriceFeedLib.sol";
 
-abstract contract FarmlyBaseStrategy is IFarmlyBaseStrategy {
+abstract contract FarmlyBaseStrategy is
+    IFarmlyBaseStrategy,
+    FarmlyPriceFeedLib
+{
+    /// @inheritdoc IFarmlyBaseStrategy
+    uint256 public override latestPrice;
     /// @inheritdoc IFarmlyBaseStrategy
     uint256 public override latestLowerPrice;
     /// @inheritdoc IFarmlyBaseStrategy
     uint256 public override latestUpperPrice;
     /// @inheritdoc IFarmlyBaseStrategy
     uint256 public override latestTimestamp;
-    /// @inheritdoc IFarmlyBaseStrategy
-    IUniV3Reader public override uniV3Reader =
-        IUniV3Reader(0x0000000000000000000000000000000000000000);
-    /// @inheritdoc IFarmlyBaseStrategy
-    address public override uniswapPool =
-        0x0000000000000000000000000000000000000000;
 
     /// @notice NotImplemented error
     error NotImplemented();
+
+    /// @notice Constructor
+    /// @param _token0DataFeed Token 0 data feed
+    /// @param _token1DataFeed Token 1 data feed
+    constructor(
+        address _token0DataFeed,
+        address _token1DataFeed
+    ) FarmlyPriceFeedLib(_token0DataFeed, _token1DataFeed) {}
 
     /// @inheritdoc IFarmlyBaseStrategy
     function isRebalanceNeeded(
@@ -28,32 +35,8 @@ abstract contract FarmlyBaseStrategy is IFarmlyBaseStrategy {
         revert NotImplemented();
     }
 
-    /*
-    /// @inheritdoc IFarmlyBaseStrategy
-    function beforeRebalance() external virtual {
-        revert NotImplemented();
+    /// @notice Set price
+    function _setLatestPrice() internal returns (uint256) {
+        latestPrice = _token0PriceInToken1();
     }
-    /// @inheritdoc IFarmlyBaseStrategy
-    function afterRebalance() external virtual {
-        revert NotImplemented();
-    }
-
-    /// @inheritdoc IFarmlyBaseStrategy
-    function beforeDeposit(uint256 _amount) external virtual {
-        revert NotImplemented();
-    }
-    /// @inheritdoc IFarmlyBaseStrategy
-    function afterDeposit(uint256 _amount) external virtual {
-        revert NotImplemented();
-    }
-
-    /// @inheritdoc IFarmlyBaseStrategy
-    function beforeWithdraw(uint256 _amount) external virtual {
-        revert NotImplemented();
-    }
-    /// @inheritdoc IFarmlyBaseStrategy
-    function afterWithdraw(uint256 _amount) external virtual {
-        revert NotImplemented();
-    }
-    */
 }

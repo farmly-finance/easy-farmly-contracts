@@ -8,12 +8,14 @@ import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfa
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
+import {FarmlyPriceFeedLib} from "./libraries/FarmlyPriceFeedLib.sol";
 import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
 contract FarmlyEasyFarm is
     AutomationCompatibleInterface,
     IFarmlyEasyFarm,
-    ERC20
+    ERC20,
+    FarmlyPriceFeedLib
 {
     /// @notice Maximum capacity reached
     error MaximumCapacityReached();
@@ -32,10 +34,6 @@ contract FarmlyEasyFarm is
     uint256 public override latestLowerPrice;
     /// @inheritdoc IFarmlyEasyFarm
     uint256 public override latestTimestamp;
-    /// @inheritdoc IFarmlyEasyFarm
-    AggregatorV3Interface public override token0DataFeed;
-    /// @inheritdoc IFarmlyEasyFarm
-    AggregatorV3Interface public override token1DataFeed;
     /// @inheritdoc IFarmlyEasyFarm
     uint256 public override positionThreshold;
     /// @inheritdoc IFarmlyEasyFarm
@@ -59,13 +57,20 @@ contract FarmlyEasyFarm is
     /// @param _maximumCapacity Maximum capacity of the farm
     /// @param _strategy Strategy of the farm
     /// @param _executor Executor of the farm
+    /// @param _token0DataFeed Token 0 data feed
+    /// @param _token1DataFeed Token 1 data feed
     constructor(
         string memory _shareTokenName,
         string memory _shareTokenSymbol,
         uint256 _maximumCapacity,
         IFarmlyBaseStrategy _strategy,
-        IFarmlyBaseExecutor _executor
-    ) ERC20(_shareTokenName, _shareTokenSymbol) {
+        IFarmlyBaseExecutor _executor,
+        address _token0DataFeed,
+        address _token1DataFeed
+    )
+        FarmlyPriceFeedLib(_token0DataFeed, _token1DataFeed)
+        ERC20(_shareTokenName, _shareTokenSymbol)
+    {
         strategy = _strategy;
 
         executor = _executor;

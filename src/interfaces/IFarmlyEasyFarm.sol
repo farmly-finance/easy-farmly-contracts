@@ -15,10 +15,6 @@ interface IFarmlyEasyFarm {
     function latestLowerPrice() external view returns (uint256);
     /// @notice Latest timestamp
     function latestTimestamp() external view returns (uint256);
-    /// @notice Token 0 data feed
-    function token0DataFeed() external view returns (AggregatorV3Interface);
-    /// @notice Token 1 data feed
-    function token1DataFeed() external view returns (AggregatorV3Interface);
     /// @notice Position threshold
     function positionThreshold() external view returns (uint256);
     /// @notice Performance fee
