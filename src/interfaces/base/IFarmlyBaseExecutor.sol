@@ -1,6 +1,15 @@
 pragma solidity ^0.8.13;
 
 interface IFarmlyBaseExecutor {
+    /// @notice Nearest range
+    /// @param _lowerPrice Lower price
+    /// @param _upperPrice Upper price
+    /// @return lowerPrice Updated lower price
+    /// @return upperPrice Updated upper price
+    function nearestRange(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    ) external view returns (uint256 lowerPrice, uint256 upperPrice);
     /// @notice Position amounts
     /// @return amount0 Amount 0
     /// @return amount1 Amount 1

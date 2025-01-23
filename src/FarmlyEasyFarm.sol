@@ -98,8 +98,11 @@ contract FarmlyEasyFarm is
             revert NotUpkeepNeeded();
         }
 
-        latestUpperPrice = strategy.latestUpperPrice();
-        latestLowerPrice = strategy.latestLowerPrice();
+        (latestLowerPrice, latestUpperPrice) = executor.nearestRange(
+            latestLowerPrice,
+            latestUpperPrice
+        );
+
         latestTimestamp = block.timestamp;
         uint256 usdValueBefore = totalUSDValue();
 

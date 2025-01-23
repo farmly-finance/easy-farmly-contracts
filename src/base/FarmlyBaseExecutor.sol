@@ -6,6 +6,14 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor {
     error NotImplemented();
 
     /// @inheritdoc IFarmlyBaseExecutor
+    function nearestRange(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    ) external view virtual returns (uint256 lowerPrice, uint256 upperPrice) {
+        revert NotImplemented();
+    }
+
+    /// @inheritdoc IFarmlyBaseExecutor
     function positionAmounts()
         external
         view

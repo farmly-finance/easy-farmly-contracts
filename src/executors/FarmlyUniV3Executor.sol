@@ -71,6 +71,26 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     }
 
     /// @inheritdoc IFarmlyBaseExecutor
+    function nearestRange(
+        uint256 _lowerPrice,
+        uint256 _upperPrice
+    ) external view override returns (uint256 lowerPrice, uint256 upperPrice) {
+        lowerPrice = FarmlyTickLib.nearestPrice(
+            _lowerPrice,
+            token0.decimals(),
+            token1.decimals(),
+            tickSpacing
+        );
+
+        upperPrice = FarmlyTickLib.nearestPrice(
+            _upperPrice,
+            token0.decimals(),
+            token1.decimals(),
+            tickSpacing
+        );
+    }
+
+    /// @inheritdoc IFarmlyBaseExecutor
     function positionAmounts()
         external
         view
