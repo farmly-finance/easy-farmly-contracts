@@ -1,66 +1,85 @@
-## Foundry
+# Easy Farmly Contracts
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Easy Farmly is a smart contract protocol for automated liquidity management strategies on Uniswap V3. It provides a framework for implementing and executing sophisticated trading strategies while managing liquidity positions.
 
-Foundry consists of:
+## Overview
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+The protocol consists of several key components:
 
-## Documentation
+- **FarmlyEasyFarm**: Main contract for managing farming strategies and positions
+- **Strategies**: Implementations of different trading strategies (e.g., Bollinger Bands)
+- **Executors**: Handlers for executing trades and managing liquidity on Uniswap V3
+- **Readers**: Contracts for reading and analyzing on-chain data
 
-https://book.getfoundry.sh/
+## Key Features
 
-## Usage
+- Automated liquidity management using customizable strategies
+- Bollinger Bands strategy implementation for dynamic range orders
+- Integration with Uniswap V3 for efficient liquidity provision
+- Modular architecture allowing for easy strategy additions
 
-### Build
+## Project Structure
 
-```shell
-$ forge build
+```
+src/
+├── base/                   # Base contracts and interfaces
+├── strategies/            # Trading strategy implementations
+├── executors/             # Strategy execution handlers
+├── readers/              # On-chain data readers
+├── interfaces/           # Contract interfaces
+└── libraries/            # Utility libraries
 ```
 
-### Test
+## Getting Started
 
-```shell
-$ forge test
+### Prerequisites
+
+- [Foundry](https://github.com/foundry-rs/foundry)
+- Node.js and npm (for development tools)
+
+### Installation
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/your-username/easy-farmly-contracts.git
+cd easy-farmly-contracts
 ```
 
-### Format
+2. Install dependencies:
 
-```shell
-$ forge fmt
+```bash
+forge install
 ```
 
-### Gas Snapshots
+3. Copy the environment file:
 
-```shell
-$ forge snapshot
+```bash
+cp .env.example .env
 ```
 
-### Anvil
+4. Configure your environment variables in `.env`
 
-```shell
-$ anvil
+### Building
+
+```bash
+forge build
 ```
 
-### Deploy
+### Testing
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```bash
+forge test
 ```
 
-### Cast
+## Security
 
-```shell
-$ cast <subcommand>
-```
+This project is in development and has not been audited. Use at your own risk.
 
-### Help
+## License
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+[License Type] - See LICENSE file for details
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
