@@ -131,3 +131,5 @@ dist
 broadcast/
 cache/
 cache/solidity-files-cache.json
+script/
+addresses.json

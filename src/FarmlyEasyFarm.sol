@@ -65,19 +65,30 @@ contract FarmlyEasyFarm is
         string memory _shareTokenName,
         string memory _shareTokenSymbol,
         uint256 _maximumCapacity,
-        IFarmlyBaseStrategy _strategy,
-        IFarmlyBaseExecutor _executor,
+        address _strategy,
+        address _executor,
+        address _token0,
+        address _token1,
         address _token0DataFeed,
         address _token1DataFeed
     )
         FarmlyPriceFeedLib(_token0DataFeed, _token1DataFeed)
         ERC20(_shareTokenName, _shareTokenSymbol)
     {
-        strategy = _strategy;
+        strategy = IFarmlyBaseStrategy(_strategy);
 
-        executor = _executor;
+        executor = IFarmlyBaseExecutor(_executor);
+
+        (latestLowerPrice, latestUpperPrice) = executor.nearestRange(
+            strategy.latestLowerPrice(),
+            strategy.latestUpperPrice()
+        );
 
         maximumCapacity = _maximumCapacity;
+
+        token0 = IERC20(_token0);
+
+        token1 = IERC20(_token1);
 
         token0Decimals = IERC20Metadata(address(token0)).decimals();
 

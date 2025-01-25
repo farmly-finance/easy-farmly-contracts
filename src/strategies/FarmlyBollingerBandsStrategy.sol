@@ -44,7 +44,10 @@ contract FarmlyBollingerBandsStrategy is
     constructor(
         address _token0DataFeed,
         address _token1DataFeed
-    ) FarmlyBaseStrategy(_token0DataFeed, _token1DataFeed) {}
+    ) FarmlyBaseStrategy(_token0DataFeed, _token1DataFeed) {
+        latestTimestamp = (block.timestamp / PERIOD) * PERIOD;
+        nextPeriodStartTimestamp = latestTimestamp + PERIOD;
+    }
 
     /// @notice Is rebalance needed
     function isRebalanceNeeded(

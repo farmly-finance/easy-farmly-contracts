@@ -9,7 +9,7 @@ import {SqrtPriceX96} from "../libraries/SqrtPriceX96.sol";
 contract UniV3Reader is IUniV3Reader {
     /// @inheritdoc IUniV3Reader
     IUniswapV3Factory public override factory =
-        IUniswapV3Factory(0x0000000000000000000000000000000000000000);
+        IUniswapV3Factory(0x0227628f3F023bb0B980b67D528571c95c6DaC1c);
 
     /// @inheritdoc IUniV3Reader
     function getPriceE18(
