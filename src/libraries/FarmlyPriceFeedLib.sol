@@ -2,14 +2,15 @@ pragma solidity ^0.8.13;
 
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {FarmlyFullMath} from "./FarmlyFullMath.sol";
+import {IFarmlyPriceFeedLib} from "../interfaces/IFarmlyPriceFeedLib.sol";
 
-abstract contract FarmlyPriceFeedLib {
+abstract contract FarmlyPriceFeedLib is IFarmlyPriceFeedLib {
     /// @notice Price precision
     uint256 internal constant PRICE_PRECISION = 1e18;
     /// @notice Token 0 data feed
-    AggregatorV3Interface public token0DataFeed;
+    AggregatorV3Interface public override token0DataFeed;
     /// @notice Token 1 data feed
-    AggregatorV3Interface public token1DataFeed;
+    AggregatorV3Interface public override token1DataFeed;
 
     /// @notice Constructor
     /// @param _token0DataFeed The Chainlink price feed for token0
