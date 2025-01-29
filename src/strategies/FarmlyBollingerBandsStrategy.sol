@@ -184,16 +184,16 @@ contract FarmlyBollingerBandsStrategy is
     function addMockPrices(uint256[] memory _prices) external onlyOwner {
         for (uint256 i = 0; i < _prices.length; i++) {
             prices.push(_prices[i]);
+
+            updateBands();
+
+            emit NewBands(
+                latestPrice,
+                latestLowerPrice,
+                latestUpperPrice,
+                latestMidPrice,
+                nextPeriodStartTimestamp
+            );
         }
-
-        updateBands();
-
-        emit NewBands(
-            latestPrice,
-            latestLowerPrice,
-            latestUpperPrice,
-            latestMidPrice,
-            nextPeriodStartTimestamp
-        );
     }
 }
