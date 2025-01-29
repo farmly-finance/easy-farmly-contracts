@@ -11,15 +11,15 @@ contract FarmlyBollingerBandsStrategy is
     Ownable
 {
     /// @notice Threshold denominator
-    uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
+    uint256 public constant THRESHOLD_DENOMINATOR = 100_000;
     /// @notice Not upkeep needed error
     error NotUpkeepNeeded();
     /// @notice Moving average period
-    uint16 public constant MA = 20;
+    uint16 public MA;
     /// @notice Standard deviation multiplier
-    uint16 public constant STD = 2;
+    uint16 public STD;
     /// @notice Period
-    uint256 public constant PERIOD = 1 hours;
+    uint256 public PERIOD;
     /// @notice Prices
     uint256[] public prices;
     /// @notice Next period start timestamp
@@ -41,10 +41,22 @@ contract FarmlyBollingerBandsStrategy is
     /// @notice Constructor
     /// @param _token0DataFeed Token 0 data feed
     /// @param _token1DataFeed Token 1 data feed
+    /// @param _ma Moving average period
+    /// @param _std Standard deviation multiplier
+    /// @param _period Period
+    /// @param _rebalanceThreshold Rebalance threshold
     constructor(
         address _token0DataFeed,
-        address _token1DataFeed
+        address _token1DataFeed,
+        uint16 _ma,
+        uint16 _std,
+        uint256 _period,
+        uint256 _rebalanceThreshold
     ) FarmlyBaseStrategy(_token0DataFeed, _token1DataFeed) {
+        MA = _ma;
+        STD = _std;
+        PERIOD = _period;
+        rebalanceThreshold = _rebalanceThreshold;
         latestTimestamp = (block.timestamp / PERIOD) * PERIOD;
         nextPeriodStartTimestamp = latestTimestamp + PERIOD;
     }
@@ -167,5 +179,21 @@ contract FarmlyBollingerBandsStrategy is
     /// @notice Prices length
     function pricesLength() external view returns (uint256) {
         return prices.length;
+    }
+
+    function addMockPrices(uint256[] memory _prices) external onlyOwner {
+        for (uint256 i = 0; i < _prices.length; i++) {
+            prices.push(_prices[i]);
+        }
+
+        updateBands();
+
+        emit NewBands(
+            latestPrice,
+            latestLowerPrice,
+            latestUpperPrice,
+            latestMidPrice,
+            nextPeriodStartTimestamp
+        );
     }
 }
