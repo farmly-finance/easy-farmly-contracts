@@ -10,17 +10,25 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
 import {FarmlyPriceFeedLib} from "./libraries/FarmlyPriceFeedLib.sol";
 import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
+import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
 
 contract FarmlyEasyFarm is
     AutomationCompatibleInterface,
     IFarmlyEasyFarm,
     ERC20,
-    FarmlyPriceFeedLib
+    FarmlyPriceFeedLib,
+    Ownable,
+    Pausable
 {
+    /// @notice Minimum deposit USD
+    error MinimumDepositUSD();
     /// @notice Maximum capacity reached
     error MaximumCapacityReached();
     /// @notice Not upkeep needed
     error NotUpkeepNeeded();
+
     /// @notice Price base
     uint256 public constant PRICE_BASE = 10 ** 18;
     /// @notice Performance fee denominator
@@ -36,8 +44,16 @@ contract FarmlyEasyFarm is
     uint256 public override latestLowerPrice;
     /// @inheritdoc IFarmlyEasyFarm
     uint256 public override latestTimestamp;
+
     /// @inheritdoc IFarmlyEasyFarm
-    uint256 public override positionThreshold;
+    address public override token0;
+    /// @inheritdoc IFarmlyEasyFarm
+    address public override token1;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint8 public override token0Decimals;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint8 public override token1Decimals;
+
     /// @inheritdoc IFarmlyEasyFarm
     uint256 public override performanceFee;
     /// @inheritdoc IFarmlyEasyFarm
@@ -45,18 +61,11 @@ contract FarmlyEasyFarm is
     /// @inheritdoc IFarmlyEasyFarm
     uint256 public override maximumCapacity;
     /// @inheritdoc IFarmlyEasyFarm
-    IERC20 public override token0;
-    /// @inheritdoc IFarmlyEasyFarm
-    IERC20 public override token1;
-    /// @inheritdoc IFarmlyEasyFarm
-    uint8 public override token0Decimals;
-    /// @inheritdoc IFarmlyEasyFarm
-    uint8 public override token1Decimals;
+    uint256 public override minimumDepositUSD;
 
     /// @notice Constructor
     /// @param _shareTokenName Name of the share token
     /// @param _shareTokenSymbol Symbol of the share token
-    /// @param _maximumCapacity Maximum capacity of the farm
     /// @param _strategy Strategy of the farm
     /// @param _executor Executor of the farm
     /// @param _token0DataFeed Token 0 data feed
@@ -64,7 +73,6 @@ contract FarmlyEasyFarm is
     constructor(
         string memory _shareTokenName,
         string memory _shareTokenSymbol,
-        uint256 _maximumCapacity,
         address _strategy,
         address _executor,
         address _token0,
@@ -84,17 +92,16 @@ contract FarmlyEasyFarm is
             strategy.latestUpperPrice()
         );
 
-        maximumCapacity = _maximumCapacity;
+        token0 = _token0;
 
-        token0 = IERC20(_token0);
+        token1 = _token1;
 
-        token1 = IERC20(_token1);
+        token0Decimals = IERC20Metadata(token0).decimals();
 
-        token0Decimals = IERC20Metadata(address(token0)).decimals();
-
-        token1Decimals = IERC20Metadata(address(token1)).decimals();
+        token1Decimals = IERC20Metadata(token1).decimals();
     }
 
+    /// @inheritdoc AutomationCompatibleInterface
     function checkUpkeep(
         bytes calldata /* checkData */
     ) external view returns (bool upkeepNeeded, bytes memory performData) {
@@ -104,7 +111,10 @@ contract FarmlyEasyFarm is
         );
     }
 
-    function performUpkeep(bytes calldata /* performData */) external override {
+    /// @inheritdoc AutomationCompatibleInterface
+    function performUpkeep(
+        bytes calldata /* performData */
+    ) external override whenNotPaused {
         if (!strategy.isRebalanceNeeded(latestLowerPrice, latestUpperPrice)) {
             revert NotUpkeepNeeded();
         }
@@ -128,20 +138,38 @@ contract FarmlyEasyFarm is
         );
     }
 
-    function deposit(uint256 _amount0, uint256 _amount1) external override {
+    /// @inheritdoc IFarmlyEasyFarm
+    function deposit(
+        uint256 _amount0,
+        uint256 _amount1
+    ) external override whenNotPaused {
         uint256 totalSupplyBefore = totalSupply();
         uint256 totalUSDBefore = totalUSDValue();
 
         (, , uint256 userDepositUSD) = tokensUSDValue(_amount0, _amount1);
+
+        if (userDepositUSD < minimumDepositUSD) {
+            revert MinimumDepositUSD();
+        }
 
         if (totalUSDBefore + userDepositUSD > maximumCapacity) {
             revert MaximumCapacityReached();
         }
 
         if (_amount0 > 0)
-            token0.transferFrom(msg.sender, address(executor), _amount0);
+            FarmlyTransferHelper.safeTransferFrom(
+                token0,
+                msg.sender,
+                address(executor),
+                _amount0
+            );
         if (_amount1 > 0)
-            token1.transferFrom(msg.sender, address(executor), _amount1);
+            FarmlyTransferHelper.safeTransferFrom(
+                token1,
+                msg.sender,
+                address(executor),
+                _amount1
+            );
 
         (uint256 amount0Collected, uint256 amount1Collected) = executor
             .onDeposit(latestLowerPrice, latestUpperPrice);
@@ -164,6 +192,8 @@ contract FarmlyEasyFarm is
 
         emit Deposit(_amount0, _amount1, shareAmount, userDepositUSD);
     }
+
+    /// @inheritdoc IFarmlyEasyFarm
     function withdraw(
         uint256 _amount,
         bool _isMinimizeTrading,
@@ -198,6 +228,7 @@ contract FarmlyEasyFarm is
         emit Withdraw(amount0, amount1, _amount, withdrawUSD);
     }
 
+    /// @inheritdoc IFarmlyEasyFarm
     function totalUSDValue() public view returns (uint256 usdValue) {
         (, , uint256 positionFeesTotal) = positionFeesUSD();
         (, , uint256 positionUSD) = positionAmountsUSD();
@@ -205,6 +236,7 @@ contract FarmlyEasyFarm is
         usdValue = positionUSD + positionFeesTotal;
     }
 
+    /// @inheritdoc IFarmlyEasyFarm
     function positionFeesUSD()
         public
         view
@@ -215,6 +247,7 @@ contract FarmlyEasyFarm is
         (amount0USD, amount1USD, totalUSD) = tokensUSDValue(amount0, amount1);
     }
 
+    /// @inheritdoc IFarmlyEasyFarm
     function positionAmountsUSD()
         public
         view
@@ -255,6 +288,7 @@ contract FarmlyEasyFarm is
         uint256 _totalSupplyBefore,
         uint256 _totalUSDBefore
     ) internal {
+        if (_amount0 == 0 && _amount1 == 0) return;
         (, , uint256 totalUSD) = tokensUSDValue(_amount0, _amount1);
 
         uint256 performanceFeeUSD = FarmlyFullMath.mulDiv(
@@ -272,5 +306,37 @@ contract FarmlyEasyFarm is
             );
 
         if (shareAmount > 0) _mint(feeAddress, shareAmount);
+    }
+
+    /// @inheritdoc IFarmlyEasyFarm
+    function setPerformanceFee(uint256 _performanceFee) external onlyOwner {
+        performanceFee = _performanceFee;
+    }
+
+    /// @inheritdoc IFarmlyEasyFarm
+    function setFeeAddress(address _feeAddress) external onlyOwner {
+        feeAddress = _feeAddress;
+    }
+
+    /// @inheritdoc IFarmlyEasyFarm
+    function setMaximumCapacity(uint256 _maximumCapacity) external onlyOwner {
+        maximumCapacity = _maximumCapacity;
+    }
+
+    /// @inheritdoc IFarmlyEasyFarm
+    function setMinimumDepositUSD(
+        uint256 _minimumDepositUSD
+    ) external onlyOwner {
+        minimumDepositUSD = _minimumDepositUSD;
+    }
+
+    /// @notice Pause the farm
+    function pause() external onlyOwner whenNotPaused {
+        _pause();
+    }
+
+    /// @notice Unpause the farm
+    function unpause() external onlyOwner whenPaused {
+        _unpause();
     }
 }

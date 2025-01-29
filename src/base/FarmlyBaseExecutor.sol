@@ -1,9 +1,15 @@
 pragma solidity ^0.8.13;
 
 import {IFarmlyBaseExecutor} from "../interfaces/base/IFarmlyBaseExecutor.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor {
+abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor, Ownable {
     error NotImplemented();
+
+    /// @notice Token 0
+    address public override token0;
+    /// @notice Token 1
+    address public override token1;
 
     /// @inheritdoc IFarmlyBaseExecutor
     function nearestRange(
@@ -38,6 +44,7 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor {
     )
         external
         virtual
+        onlyOwner
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
         revert NotImplemented();
@@ -49,6 +56,7 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor {
     )
         external
         virtual
+        onlyOwner
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
         revert NotImplemented();
@@ -62,6 +70,7 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor {
     )
         external
         virtual
+        onlyOwner
         returns (
             uint256 amount0Collected,
             uint256 amount1Collected,

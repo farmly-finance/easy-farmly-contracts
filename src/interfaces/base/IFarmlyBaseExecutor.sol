@@ -1,6 +1,10 @@
 pragma solidity ^0.8.13;
 
 interface IFarmlyBaseExecutor {
+    /// @notice Token 0
+    function token0() external view returns (address);
+    /// @notice Token 1
+    function token1() external view returns (address);
     /// @notice Nearest range
     /// @param _lowerPrice Lower price
     /// @param _upperPrice Upper price

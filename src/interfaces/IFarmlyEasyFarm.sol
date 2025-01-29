@@ -4,7 +4,8 @@ import {IFarmlyBaseStrategy} from "./base/IFarmlyBaseStrategy.sol";
 import {IFarmlyBaseExecutor} from "./base/IFarmlyBaseExecutor.sol";
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-interface IFarmlyEasyFarm {
+import {IFarmlyPriceFeedLib} from "./IFarmlyPriceFeedLib.sol";
+interface IFarmlyEasyFarm is IFarmlyPriceFeedLib {
     /// @notice Strategy address
     function strategy() external view returns (IFarmlyBaseStrategy);
     /// @notice Executor address
@@ -15,24 +16,34 @@ interface IFarmlyEasyFarm {
     function latestLowerPrice() external view returns (uint256);
     /// @notice Latest timestamp
     function latestTimestamp() external view returns (uint256);
-    /// @notice Position threshold
-    function positionThreshold() external view returns (uint256);
     /// @notice Performance fee
     function performanceFee() external view returns (uint256);
     /// @notice Fee address
     function feeAddress() external view returns (address);
+    /// @notice Minimum deposit USD
+    function minimumDepositUSD() external view returns (uint256);
     /// @notice Maximum capacity
     function maximumCapacity() external view returns (uint256);
     /// @notice Token 0
-    function token0() external view returns (IERC20);
+    function token0() external view returns (address);
     /// @notice Token 1
-    function token1() external view returns (IERC20);
+    function token1() external view returns (address);
     /// @notice Token 0 decimals
     function token0Decimals() external view returns (uint8);
     /// @notice Token 1 decimals
     function token1Decimals() external view returns (uint8);
     /// @notice Total USD value of easy farm
     function totalUSDValue() external view returns (uint256);
+    /// @notice Position fees USD
+    function positionFeesUSD()
+        external
+        view
+        returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD);
+    /// @notice Position amounts USD
+    function positionAmountsUSD()
+        external
+        view
+        returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD);
 
     /// @notice Deposit
     /// @param _amount0 Amount of token 0
@@ -71,4 +82,17 @@ interface IFarmlyEasyFarm {
         uint256 sharePrice,
         uint256 timestamp
     );
+
+    /// @notice Set performance fee
+    /// @param _performanceFee Performance fee
+    function setPerformanceFee(uint256 _performanceFee) external;
+    /// @notice Set fee address
+    /// @param _feeAddress Fee address
+    function setFeeAddress(address _feeAddress) external;
+    /// @notice Set maximum capacity
+    /// @param _maximumCapacity Maximum capacity
+    function setMaximumCapacity(uint256 _maximumCapacity) external;
+    /// @notice Set minimum deposit USD
+    /// @param _minimumDepositUSD Minimum deposit USD
+    function setMinimumDepositUSD(uint256 _minimumDepositUSD) external;
 }
