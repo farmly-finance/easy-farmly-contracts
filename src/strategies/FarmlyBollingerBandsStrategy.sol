@@ -122,6 +122,7 @@ contract FarmlyBollingerBandsStrategy is
             );
         }
 
+        latestTimestamp = nextPeriodStartTimestamp;
         nextPeriodStartTimestamp += PERIOD;
     }
 
@@ -136,12 +137,14 @@ contract FarmlyBollingerBandsStrategy is
         latestUpperPrice = upperBand;
         latestLowerPrice = lowerBand;
         latestMidPrice = sma;
-
-        latestTimestamp = nextPeriodStartTimestamp;
     }
 
     /// @notice Calculate SMA
     function calculateSMA() internal view returns (uint256) {
+        if (prices.length < MA) {
+            return 0;
+        }
+
         uint256 sum = 0;
 
         for (uint256 i = prices.length - MA; i < prices.length; i++) {
@@ -153,6 +156,10 @@ contract FarmlyBollingerBandsStrategy is
 
     /// @notice Calculate standard deviation
     function calculateStdDev(uint256 sma) internal view returns (uint256) {
+        if (prices.length < MA) {
+            return 0;
+        }
+
         uint256 variance = 0;
 
         for (uint256 i = prices.length - MA; i < prices.length; i++) {
