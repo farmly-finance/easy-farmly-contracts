@@ -36,7 +36,7 @@ abstract contract FarmlyBaseStrategy is
     }
 
     /// @notice Set price
-    function _setLatestPrice() internal returns (uint256) {
+    function _setLatestPrice() internal {
         latestPrice = _token0PriceInToken1();
     }
 }
