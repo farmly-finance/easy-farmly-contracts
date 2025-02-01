@@ -6,3 +6,4 @@
 uni-v3-lib/=lib/uni-v3-lib.git/
 solady/=lib/solady/
 @solmate/=lib/solmate/src/
+base64-sol/=lib/base64/
