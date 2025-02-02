@@ -38,14 +38,11 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     }
 
     /// @notice Factory
-    IUniswapV3Factory public factory =
-        IUniswapV3Factory(0x0227628f3F023bb0B980b67D528571c95c6DaC1c);
+    IUniswapV3Factory public factory;
     /// @notice Nonfungible position manager
-    INonfungiblePositionManager public nonfungiblePositionManager =
-        INonfungiblePositionManager(0x1238536071E1c677A632429e3655c799b22cDA52);
+    INonfungiblePositionManager public nonfungiblePositionManager;
     /// @notice Swap router
-    ISwapRouter public swapRouter =
-        ISwapRouter(0x505b34C7576842290560415CC7a325b99eB381A3);
+    ISwapRouter public swapRouter;
 
     /// @notice Pool fee
     uint24 public poolFee;
@@ -57,10 +54,25 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     uint256 public latestTokenId;
 
     /// @notice Constructor
+    /// @param _factory Factory
+    /// @param _nonfungiblePositionManager Nonfungible position manager
+    /// @param _swapRouter Swap router
     /// @param _token0 Token 0
     /// @param _token1 Token 1
     /// @param _poolFee Pool fee
-    constructor(address _token0, address _token1, uint24 _poolFee) {
+    constructor(
+        address _factory,
+        address _nonfungiblePositionManager,
+        address _swapRouter,
+        address _token0,
+        address _token1,
+        uint24 _poolFee
+    ) {
+        factory = IUniswapV3Factory(_factory);
+        nonfungiblePositionManager = INonfungiblePositionManager(
+            _nonfungiblePositionManager
+        );
+        swapRouter = ISwapRouter(_swapRouter);
         pool = IUniswapV3Pool(factory.getPool(_token0, _token1, _poolFee));
         tickSpacing = uint24(pool.tickSpacing());
         token0 = _token0;
