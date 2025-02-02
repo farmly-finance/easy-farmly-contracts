@@ -132,3 +132,4 @@ broadcast/
 cache/
 cache/solidity-files-cache.json
 addresses.json
+deployments/
