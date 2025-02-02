@@ -3,7 +3,10 @@ src = "src"
 out = "out"
 libs = ["lib"]
 evm_version = "shanghai"
+fs_permissions = [{ access = "read-write", path = "./"}]
+
 
 [rpc_endpoints]
 sepolia = "https://sepolia.infura.io/v3/e7afabd980144381a2fd513965e5c388"
+local = "http://127.0.0.1:8545"
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
