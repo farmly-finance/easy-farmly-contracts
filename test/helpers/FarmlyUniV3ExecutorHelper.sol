@@ -31,20 +31,26 @@ contract FarmlyUniV3ExecutorHelper is FarmlyUniV3Executor {
     function exposed_increasePosition(
         uint256 _amount0,
         uint256 _amount1
-    ) external {
-        increasePosition(_amount0, _amount1);
+    ) external returns (uint128 liquidity, uint256 amount0, uint256 amount1) {
+        (liquidity, amount0, amount1) = increasePosition(_amount0, _amount1);
     }
 
-    function exposed_decreasePosition(uint128 _liquidity) external {
-        decreasePosition(_liquidity);
+    function exposed_decreasePosition(
+        uint128 _liquidity
+    ) external returns (uint256 amount0, uint256 amount1) {
+        (amount0, amount1) = decreasePosition(_liquidity);
     }
 
     function exposed_mintPosition(
         Position memory _position,
         uint256 _amount0,
         uint256 _amount1
-    ) external {
-        mintPosition(_position, _amount0, _amount1);
+    ) external returns (uint256 tokenId, uint256 amount0, uint256 amount1) {
+        (tokenId, amount0, amount1) = mintPosition(
+            _position,
+            _amount0,
+            _amount1
+        );
     }
 
     function exposed_swapExactInput(
@@ -70,6 +76,16 @@ contract FarmlyUniV3ExecutorHelper is FarmlyUniV3Executor {
         returns (int24 tickLower, int24 tickUpper, uint128 liquidity)
     {
         (tickLower, tickUpper, liquidity) = positionInfo();
+    }
+
+    function exposed_amountsForAdd(
+        Position memory _position
+    )
+        external
+        view
+        returns (Swap memory swap, uint256 amount0Add, uint256 amount1Add)
+    {
+        return amountsForAdd(_position);
     }
 
     function exposed_tokenBalances()
