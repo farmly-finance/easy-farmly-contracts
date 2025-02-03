@@ -2,14 +2,14 @@ pragma solidity 0.8.19;
 
 import "@uniswap/v3-core/contracts/libraries/FixedPoint96.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
-import {SafeCastUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/math/SafeCastUpgradeable.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {FarmlyFullMath} from "./FarmlyFullMath.sol";
 
 library SqrtPriceX96 {
     int128 private constant MIN_64x64 = -0x80000000000000000000000000000000;
     int128 private constant MAX_64x64 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
-    using SafeCastUpgradeable for uint256;
+    using SafeCast for uint256;
 
     function decodeSqrtPriceX96(
         uint160 _sqrtPriceX96,
