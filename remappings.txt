@@ -3,7 +3,7 @@
 @uniswap/swap-router-contracts/=lib/swap-router-contracts/
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
-uni-v3-lib/=lib/uni-v3-lib.git/
+uni-v3-lib/=lib/uni-v3-lib/
 solady/=lib/solady/
 @solmate/=lib/solmate/src/
 base64-sol/=lib/base64/
