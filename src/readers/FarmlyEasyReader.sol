@@ -19,8 +19,8 @@ contract FarmlyEasyReader {
     struct Position {
         int24 tickLower;
         int24 tickUpper;
-        uint amount0Add;
-        uint amount1Add;
+        uint256 amount0Add;
+        uint256 amount1Add;
     }
 
     /// @notice Swap

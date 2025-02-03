@@ -11,10 +11,7 @@ contract FarmlyPriceFeedLibTest is Test {
         MockPriceFeed token0PriceFeed = new MockPriceFeed(1000 * 1e8);
         MockPriceFeed token1PriceFeed = new MockPriceFeed(1 * 1e8);
 
-        farmlyPriceFeedLibHelper = new FarmlyPriceFeedLibHelper(
-            address(token0PriceFeed),
-            address(token1PriceFeed)
-        );
+        farmlyPriceFeedLibHelper = new FarmlyPriceFeedLibHelper(address(token0PriceFeed), address(token1PriceFeed));
     }
 
     function test_token0PriceInToken1() public {
@@ -38,8 +35,7 @@ contract FarmlyPriceFeedLibTest is Test {
     }
 
     function test_tokenPrices() public {
-        (uint256 token0Price, uint256 token1Price) = farmlyPriceFeedLibHelper
-            .exposed_tokenPrices();
+        (uint256 token0Price, uint256 token1Price) = farmlyPriceFeedLibHelper.exposed_tokenPrices();
         assertEq(token0Price, 1000e18);
         assertEq(token1Price, 1e18);
     }

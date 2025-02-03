@@ -11,10 +11,7 @@ interface IFarmlyUniV3Executor is IFarmlyBaseExecutor {
     /// @notice Factory
     function factory() external view returns (IUniswapV3Factory);
     /// @notice Nonfungible position manager
-    function nonfungiblePositionManager()
-        external
-        view
-        returns (INonfungiblePositionManager);
+    function nonfungiblePositionManager() external view returns (INonfungiblePositionManager);
     /// @notice Swap router
     function swapRouter() external view returns (ISwapRouter);
     /// @notice Pool fee

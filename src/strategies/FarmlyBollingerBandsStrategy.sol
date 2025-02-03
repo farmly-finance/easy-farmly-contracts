@@ -13,8 +13,10 @@ contract FarmlyBollingerBandsStrategy is
     /// @notice Threshold denominator
     uint256 public constant THRESHOLD_DENOMINATOR = 100_000;
     /// @notice Not upkeep needed error
+
     error NotUpkeepNeeded();
     /// @notice Moving average period
+
     uint16 public MA;
     /// @notice Standard deviation multiplier
     uint16 public STD;

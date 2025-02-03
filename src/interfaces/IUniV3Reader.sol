@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
+
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 
 interface IUniV3Reader {
@@ -20,9 +21,7 @@ interface IUniV3Reader {
     /// @return observationCardinalityNext observation cardinality next
     /// @return feeProtocol fee protocol
     /// @return unlocked unlocked
-    function getSlot0(
-        address _pool
-    )
+    function getSlot0(address _pool)
         external
         view
         returns (
@@ -41,9 +40,7 @@ interface IUniV3Reader {
     /// @return token1 token1
     /// @return fee fee
     /// @return tickSpacing tick spacing
-    function getPoolInfo(
-        address _pool
-    )
+    function getPoolInfo(address _pool)
         external
         view
         returns (address token0, address token1, uint24 fee, int24 tickSpacing);

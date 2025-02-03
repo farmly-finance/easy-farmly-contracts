@@ -12,8 +12,5 @@ interface IFarmlyBaseStrategy {
     /// @notice Latest timestamp
     function latestTimestamp() external view returns (uint256);
     /// @notice Is rebalance needed
-    function isRebalanceNeeded(
-        uint256 _lowerPrice,
-        uint256 _upperPrice
-    ) external view returns (bool);
+    function isRebalanceNeeded(uint256 _lowerPrice, uint256 _upperPrice) external view returns (bool);
 }

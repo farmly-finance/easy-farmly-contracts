@@ -29,6 +29,7 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor, Ownable {
         revert NotImplemented();
     }
     /// @inheritdoc IFarmlyBaseExecutor
+
     function positionFees()
         external
         view
@@ -38,6 +39,7 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor, Ownable {
         revert NotImplemented();
     }
     /// @inheritdoc IFarmlyBaseExecutor
+
     function onRebalance(
         uint256 _lowerPrice,
         uint256 _upperPrice
@@ -50,6 +52,7 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor, Ownable {
         revert NotImplemented();
     }
     /// @inheritdoc IFarmlyBaseExecutor
+
     function onDeposit(
         uint256 _lowerPrice,
         uint256 _upperPrice
@@ -62,6 +65,7 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor, Ownable {
         revert NotImplemented();
     }
     /// @inheritdoc IFarmlyBaseExecutor
+
     function onWithdraw(
         uint256 _amount,
         address _to,

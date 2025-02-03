@@ -156,20 +156,22 @@ contract FarmlyEasyFarm is
             revert MaximumCapacityReached();
         }
 
-        if (_amount0 > 0)
+        if (_amount0 > 0) {
             FarmlyTransferHelper.safeTransferFrom(
                 token0,
                 msg.sender,
                 address(executor),
                 _amount0
             );
-        if (_amount1 > 0)
+        }
+        if (_amount1 > 0) {
             FarmlyTransferHelper.safeTransferFrom(
                 token1,
                 msg.sender,
                 address(executor),
                 _amount1
             );
+        }
 
         (uint256 amount0Collected, uint256 amount1Collected) = executor
             .onDeposit(latestLowerPrice, latestUpperPrice);

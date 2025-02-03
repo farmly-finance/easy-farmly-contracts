@@ -10,16 +10,7 @@ contract FarmlyBollingerBandsStrategyHelper is FarmlyBollingerBandsStrategy {
         uint16 std,
         uint256 period,
         uint256 rebalanceThreshold
-    )
-        FarmlyBollingerBandsStrategy(
-            token0PriceFeed,
-            token1PriceFeed,
-            ma,
-            std,
-            period,
-            rebalanceThreshold
-        )
-    {}
+    ) FarmlyBollingerBandsStrategy(token0PriceFeed, token1PriceFeed, ma, std, period, rebalanceThreshold) {}
 
     function exposed_setLatestPrice() external {
         _setLatestPrice();
@@ -37,17 +28,11 @@ contract FarmlyBollingerBandsStrategyHelper is FarmlyBollingerBandsStrategy {
         return calculateSMA();
     }
 
-    function exposed_calculateStdDev(
-        uint256 sma
-    ) external view returns (uint256) {
+    function exposed_calculateStdDev(uint256 sma) external view returns (uint256) {
         return calculateStdDev(sma);
     }
 
-    function exposed_calculateBollingerBands()
-        external
-        view
-        returns (uint256, uint256, uint256)
-    {
+    function exposed_calculateBollingerBands() external view returns (uint256, uint256, uint256) {
         return calculateBollingerBands();
     }
 }

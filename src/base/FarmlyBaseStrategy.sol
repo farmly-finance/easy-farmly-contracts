@@ -3,10 +3,7 @@ pragma solidity ^0.8.13;
 import {IFarmlyBaseStrategy} from "../interfaces/base/IFarmlyBaseStrategy.sol";
 import {FarmlyPriceFeedLib} from "../libraries/FarmlyPriceFeedLib.sol";
 
-abstract contract FarmlyBaseStrategy is
-    IFarmlyBaseStrategy,
-    FarmlyPriceFeedLib
-{
+abstract contract FarmlyBaseStrategy is IFarmlyBaseStrategy, FarmlyPriceFeedLib {
     /// @inheritdoc IFarmlyBaseStrategy
     uint256 public override latestPrice;
     /// @inheritdoc IFarmlyBaseStrategy
@@ -22,16 +19,12 @@ abstract contract FarmlyBaseStrategy is
     /// @notice Constructor
     /// @param _token0DataFeed Token 0 data feed
     /// @param _token1DataFeed Token 1 data feed
-    constructor(
-        address _token0DataFeed,
-        address _token1DataFeed
-    ) FarmlyPriceFeedLib(_token0DataFeed, _token1DataFeed) {}
+    constructor(address _token0DataFeed, address _token1DataFeed)
+        FarmlyPriceFeedLib(_token0DataFeed, _token1DataFeed)
+    {}
 
     /// @inheritdoc IFarmlyBaseStrategy
-    function isRebalanceNeeded(
-        uint256 _lowerPrice,
-        uint256 _upperPrice
-    ) external view virtual returns (bool) {
+    function isRebalanceNeeded(uint256 _lowerPrice, uint256 _upperPrice) external view virtual returns (bool) {
         revert NotImplemented();
     }
 

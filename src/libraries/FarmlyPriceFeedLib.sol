@@ -26,11 +26,7 @@ abstract contract FarmlyPriceFeedLib is IFarmlyPriceFeedLib {
         uint256 token0Price = _token0Price();
         uint256 token1Price = _token1Price();
 
-        price = FarmlyFullMath.mulDiv(
-            token0Price,
-            PRICE_PRECISION,
-            token1Price
-        );
+        price = FarmlyFullMath.mulDiv(token0Price, PRICE_PRECISION, token1Price);
     }
 
     /// @notice Get the price of token1 in terms of token0
@@ -39,45 +35,27 @@ abstract contract FarmlyPriceFeedLib is IFarmlyPriceFeedLib {
         uint256 token0Price = _token0Price();
         uint256 token1Price = _token1Price();
 
-        price = FarmlyFullMath.mulDiv(
-            token1Price,
-            PRICE_PRECISION,
-            token0Price
-        );
+        price = FarmlyFullMath.mulDiv(token1Price, PRICE_PRECISION, token0Price);
     }
 
     /// @notice Get the price of token0
     /// @return token0Price The price of token0
     function _token0Price() internal view returns (uint256) {
-        (, int256 token0Answer, , , ) = token0DataFeed.latestRoundData();
-        return
-            FarmlyFullMath.mulDiv(
-                uint256(token0Answer),
-                PRICE_PRECISION,
-                10 ** token0DataFeed.decimals()
-            );
+        (, int256 token0Answer,,,) = token0DataFeed.latestRoundData();
+        return FarmlyFullMath.mulDiv(uint256(token0Answer), PRICE_PRECISION, 10 ** token0DataFeed.decimals());
     }
 
     /// @notice Get the price of token1
     /// @return token1Price The price of token1
     function _token1Price() internal view returns (uint256) {
-        (, int256 token1Answer, , , ) = token1DataFeed.latestRoundData();
-        return
-            FarmlyFullMath.mulDiv(
-                uint256(token1Answer),
-                PRICE_PRECISION,
-                10 ** token1DataFeed.decimals()
-            );
+        (, int256 token1Answer,,,) = token1DataFeed.latestRoundData();
+        return FarmlyFullMath.mulDiv(uint256(token1Answer), PRICE_PRECISION, 10 ** token1DataFeed.decimals());
     }
 
     /// @notice Get the prices of the tokens
     /// @return token0Price The price of token0
     /// @return token1Price The price of token1
-    function _tokenPrices()
-        internal
-        view
-        returns (uint256 token0Price, uint256 token1Price)
-    {
+    function _tokenPrices() internal view returns (uint256 token0Price, uint256 token1Price) {
         token0Price = _token0Price();
         token1Price = _token1Price();
     }
