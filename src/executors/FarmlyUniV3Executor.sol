@@ -20,12 +20,13 @@ import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 contract FarmlyUniV3Executor is FarmlyBaseExecutor {
+    error IncreasePositionWithZeroAmount();
     /// @notice Position
     struct Position {
         int24 tickLower;
         int24 tickUpper;
-        uint amount0Add;
-        uint amount1Add;
+        uint256 amount0Add;
+        uint256 amount1Add;
     }
 
     /// @notice Swap
@@ -192,6 +193,7 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
         addBalanceLiquidity(_lowerPrice, _upperPrice);
     }
     /// @inheritdoc IFarmlyBaseExecutor
+
     function onDeposit(
         uint256 _lowerPrice,
         uint256 _upperPrice
@@ -206,6 +208,7 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
         addBalanceLiquidity(_lowerPrice, _upperPrice);
     }
     /// @inheritdoc IFarmlyBaseExecutor
+
     function onWithdraw(
         uint256 _amount,
         address _to,
@@ -333,6 +336,10 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
         uint256 _amount0,
         uint256 _amount1
     ) internal returns (uint128 liquidity, uint256 amount0, uint256 amount1) {
+        if (_amount0 == 0 && _amount1 == 0) {
+            revert IncreasePositionWithZeroAmount();
+        }
+
         (int24 tickLower, int24 tickUpper, ) = positionInfo();
         (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
 
