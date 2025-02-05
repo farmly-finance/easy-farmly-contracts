@@ -21,6 +21,10 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     error IncreasePositionWithZeroAmount();
+    error InvalidPriceRange();
+    error WithdrawZeroAmount();
+    error WithdrawZeroAddress();
+    error WithdrawAmountTooLarge();
     /// @notice Position
     struct Position {
         int24 tickLower;
@@ -203,6 +207,10 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
         onlyOwner
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
+        if (_lowerPrice >= _upperPrice) {
+            revert InvalidPriceRange();
+        }
+
         (amount0Collected, amount1Collected) = collectFees();
 
         addBalanceLiquidity(_lowerPrice, _upperPrice);
@@ -211,9 +219,7 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
 
     function onWithdraw(
         uint256 _amount,
-        address _to,
-        bool _isMinimizeTrading,
-        bool _zeroForOne
+        address _to
     )
         external
         override
@@ -225,6 +231,18 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
             uint256 amount1
         )
     {
+        if (_amount == 0) {
+            revert WithdrawZeroAmount();
+        }
+
+        if (_to == address(0)) {
+            revert WithdrawZeroAddress();
+        }
+
+        if (_amount > 100e18) {
+            revert WithdrawAmountTooLarge();
+        }
+
         (amount0Collected, amount1Collected) = collectFees();
 
         addBalanceLiquidity(0, 0);
@@ -232,28 +250,10 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
         (, , uint128 liquidity) = positionInfo();
 
         (amount0, amount1) = decreasePosition(
-            SafeCast.toUint128(FarmlyFullMath.mulDiv(_amount, liquidity, 1e18))
+            SafeCast.toUint128(
+                FarmlyFullMath.mulDiv(_amount, liquidity, 100e18)
+            )
         );
-
-        if (!_isMinimizeTrading) {
-            Swap memory swap = Swap(
-                _zeroForOne ? token0 : token1,
-                _zeroForOne ? token1 : token0,
-                _zeroForOne ? amount0 : amount1,
-                0,
-                0
-            );
-
-            uint256 amountOut = swapExactInput(swap);
-
-            if (_zeroForOne) {
-                amount0 = 0;
-                amount1 = amountOut;
-            } else {
-                amount0 = amountOut;
-                amount1 = 0;
-            }
-        }
 
         if (amount0 > 0) {
             FarmlyTransferHelper.safeTransfer(token0, _to, amount0);

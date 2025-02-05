@@ -3,108 +3,24 @@ pragma solidity ^0.8.13;
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 
-import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import {INonfungiblePositionManager} from "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
-import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import {TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
-import {MockERC20Token} from "./mocks/MockERC20Token.sol";
 import {FarmlyUniV3Executor} from "../src/executors/FarmlyUniV3Executor.sol";
 import {FarmlyUniV3ExecutorHelper} from "./helpers/FarmlyUniV3ExecutorHelper.sol";
-import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {FarmlyTickLib} from "../src/libraries/FarmlyTickLib.sol";
+import {UniswapV3Fixture} from "./fixtures/UniswapV3Fixture.sol";
 
-contract FarmlyUniV3ExecutorTest is Test {
-    IUniswapV3Factory uniswapV3Factory;
-    INonfungiblePositionManager nonfungiblePositionManager;
-    ISwapRouter swapRouter;
-    MockERC20Token token0;
-    MockERC20Token token1;
+contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
     FarmlyUniV3ExecutorHelper executor;
 
+    constructor() UniswapV3Fixture() {}
+
     function setUp() public {
-        address alice = makeAddr("Alice");
-
-        uniswapV3Factory = IUniswapV3Factory(
-            vm.parseAddress(vm.readFile("deployments/uniswapV3Factory.txt"))
-        );
-
-        nonfungiblePositionManager = INonfungiblePositionManager(
-            vm.parseAddress(
-                vm.readFile("deployments/nonfungiblePositionManager.txt")
-            )
-        );
-        swapRouter = ISwapRouter(
-            vm.parseAddress(vm.readFile("deployments/swapRouter.txt"))
-        );
-
-        token0 = new MockERC20Token("Mock tWETH", "tWETH");
-        token1 = new MockERC20Token("Mock tUSDC", "tUSDC");
-
-        token0.mint(alice, 1_00e18);
-        token1.mint(alice, 1_000_000e18);
-
-        bool zeroForOne = address(token0) < address(token1);
-
-        if (!zeroForOne) {
-            (token0, token1) = (token1, token0);
-        }
-
-        IUniswapV3Pool pool = IUniswapV3Pool(
-            uniswapV3Factory.createPool(address(token0), address(token1), 500)
-        );
-
-        pool.initialize(
-            TickMath.getSqrtRatioAtTick(
-                FarmlyTickLib.getTick(
-                    1000e18,
-                    token0.decimals(),
-                    token1.decimals(),
-                    uint24(pool.tickSpacing())
-                )
-            )
-        );
-
-        uint256 amount0 = zeroForOne ? 100e18 : 100_000e18;
-        uint256 amount1 = zeroForOne ? 100_000e18 : 100e18;
-
-        vm.startPrank(alice);
-        token0.approve(address(nonfungiblePositionManager), amount0);
-        token1.approve(address(nonfungiblePositionManager), amount1);
-
-        nonfungiblePositionManager.mint(
-            INonfungiblePositionManager.MintParams({
-                token0: address(token0),
-                token1: address(token1),
-                fee: 500,
-                tickLower: FarmlyTickLib.getTick(
-                    900e18,
-                    token0.decimals(),
-                    token1.decimals(),
-                    uint24(pool.tickSpacing())
-                ),
-                tickUpper: FarmlyTickLib.getTick(
-                    1100e18,
-                    token0.decimals(),
-                    token1.decimals(),
-                    uint24(pool.tickSpacing())
-                ),
-                amount0Desired: amount0,
-                amount1Desired: amount1,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: alice,
-                deadline: block.timestamp
-            })
-        );
-        vm.stopPrank();
-
         executor = new FarmlyUniV3ExecutorHelper(
             address(uniswapV3Factory),
             address(nonfungiblePositionManager),
             address(swapRouter),
             address(token0),
             address(token1),
-            500
+            poolFee
         );
     }
 
@@ -450,31 +366,13 @@ contract FarmlyUniV3ExecutorTest is Test {
 
         executor.exposed_addBalanceLiquidity(900e18, 1100e18);
 
-        FarmlyUniV3Executor.Swap memory swap = FarmlyUniV3Executor.Swap({
-            tokenIn: address(token0),
-            tokenOut: address(token1),
-            amountIn: 1e18,
-            amountOut: 0,
-            sqrtPriceX96: 0
-        });
-
-        token0.mint(address(executor), 1e18);
-        executor.exposed_swapExactInput(swap);
+        _swapFromBob(true);
 
         (uint256 amount0, uint256 amount1) = executor.exposed_collectFees();
         assertEq(amount0, 456470799282880);
         assertEq(amount1, 0);
 
-        swap = FarmlyUniV3Executor.Swap({
-            tokenIn: address(token1),
-            tokenOut: address(token0),
-            amountIn: 1e18,
-            amountOut: 0,
-            sqrtPriceX96: 0
-        });
-
-        token1.mint(address(executor), 1000e18);
-        executor.exposed_swapExactInput(swap);
+        _swapFromBob(false);
 
         (amount0, amount1) = executor.exposed_collectFees();
         assertEq(amount0, 0);
@@ -702,16 +600,7 @@ contract FarmlyUniV3ExecutorTest is Test {
 
         executor.exposed_addBalanceLiquidity(900e18, 1100e18);
 
-        FarmlyUniV3Executor.Swap memory swap = FarmlyUniV3Executor.Swap({
-            tokenIn: address(token0),
-            tokenOut: address(token1),
-            amountIn: 1e18,
-            amountOut: 0,
-            sqrtPriceX96: 0
-        });
-
-        token0.mint(address(executor), 1e18);
-        executor.exposed_swapExactInput(swap);
+        _swapFromBob(true);
 
         (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) = executor
             .exposed_feeGrowthInside(tickLower, tickUpper);
@@ -719,16 +608,7 @@ contract FarmlyUniV3ExecutorTest is Test {
         assertGt(feeGrowthInside0X128, 0);
         assertEq(feeGrowthInside1X128, 0);
 
-        swap = FarmlyUniV3Executor.Swap({
-            tokenIn: address(token1),
-            tokenOut: address(token0),
-            amountIn: 1e18,
-            amountOut: 0,
-            sqrtPriceX96: 0
-        });
-
-        token1.mint(address(executor), 1e18);
-        executor.exposed_swapExactInput(swap);
+        _swapFromBob(false);
 
         (feeGrowthInside0X128, feeGrowthInside1X128) = executor
             .exposed_feeGrowthInside(tickLower, tickUpper);
@@ -766,35 +646,35 @@ contract FarmlyUniV3ExecutorTest is Test {
 
         executor.exposed_addBalanceLiquidity(900e18, 1100e18);
 
-        FarmlyUniV3Executor.Swap memory swap = FarmlyUniV3Executor.Swap({
-            tokenIn: address(token0),
-            tokenOut: address(token1),
-            amountIn: 1e18,
-            amountOut: 0,
-            sqrtPriceX96: 0
-        });
-
-        token0.mint(address(executor), 1e18);
-        executor.exposed_swapExactInput(swap);
+        _swapFromBob(true);
 
         (uint256 amount0, uint256 amount1) = executor.positionFees();
         assertEq(amount0, 456470799282880);
         assertEq(amount1, 0);
 
-        swap = FarmlyUniV3Executor.Swap({
-            tokenIn: address(token1),
-            tokenOut: address(token0),
-            amountIn: 1e18,
-            amountOut: 0,
-            sqrtPriceX96: 0
-        });
-
-        token1.mint(address(executor), 1e18);
-        executor.exposed_swapExactInput(swap);
+        _swapFromBob(false);
 
         (amount0, amount1) = executor.positionFees();
         assertEq(amount0, 456470799282880);
         assertEq(amount1, 456470799282880);
+    }
+
+    function test_onRebalance() public {
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        executor.exposed_addBalanceLiquidity(900e18, 1100e18);
+
+        _swapFromBob(true);
+
+        executor.onRebalance(950e18, 1050e18);
+
+        (uint256 amount0, uint256 amount1) = executor.positionAmounts();
+        assertEq(amount0, 1954061238454106981);
+        assertEq(amount1, 92045189247507633410);
+        assertEq(executor.latestTokenId(), 3);
+        assertLt(token0.balanceOf(address(executor)), amount0 / 10_000);
+        assertLt(token1.balanceOf(address(executor)), amount1 / 10_000);
     }
 
     function test_onRebalance_notOwner_revert() public {
@@ -803,21 +683,223 @@ contract FarmlyUniV3ExecutorTest is Test {
         executor.onRebalance(0, 0);
     }
 
-    function test_onRebalance() public {}
+    function test_onRebalance_invalidRange_revert() public {
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        executor.exposed_addBalanceLiquidity(900e18, 1100e18);
+
+        vm.expectRevert();
+        executor.onRebalance(0, 0);
+
+        vm.expectRevert();
+        executor.onRebalance(1050e18, 1050e18);
+
+        vm.expectRevert();
+        executor.onRebalance(1050e18, 950e18);
+    }
+
+    function test_onRebalance_zeroFees() public {}
+
+    function test_onRebalance_withoutMint() public {}
 
     function test_onDeposit_notOwner_revert() public {
         vm.prank(makeAddr("Alice"));
         vm.expectRevert();
-        executor.onDeposit(0, 0);
+        executor.onDeposit(900e18, 1100e18);
     }
 
-    function test_onDeposit() public {}
+    function test_onDeposit_invalidRange_revert() public {
+        vm.expectRevert();
+        executor.onDeposit(0, 0);
+
+        vm.expectRevert();
+        executor.onDeposit(1000e18, 1000e18);
+
+        vm.expectRevert();
+        executor.onDeposit(1100e18, 900e18);
+    }
+
+    function test_onDeposit_zeroBalanceZeroFees_mint() public {
+        (uint256 amount0Collected, uint256 amount1Collected) = executor
+            .onDeposit(900e18, 1100e18);
+        assertEq(executor.latestTokenId(), 0);
+        assertEq(amount0Collected, 0);
+        assertEq(amount1Collected, 0);
+    }
+
+    function test_onDeposit_zeroBalanceZeroFees_increase() public {
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        (uint256 amount0Collected, uint256 amount1Collected) = executor
+            .onDeposit(900e18, 1100e18);
+
+        assertEq(executor.latestTokenId(), 2);
+        assertEq(amount0Collected, 0);
+        assertEq(amount1Collected, 0);
+
+        deal(address(token0), address(executor), 0);
+        deal(address(token1), address(executor), 0);
+
+        vm.expectRevert();
+        executor.onDeposit(900e18, 1100e18);
+    }
+
+    function test_onDeposit_zeroBalanceNonZeroFees() public {
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        (uint256 amount0Collected, uint256 amount1Collected) = executor
+            .onDeposit(900e18, 1100e18);
+
+        _swapFromBob(true);
+
+        (amount0Collected, amount1Collected) = executor.onDeposit(
+            900e18,
+            1100e18
+        );
+        assertEq(executor.latestTokenId(), 2);
+        assertEq(amount0Collected, 456470799282880);
+        assertEq(amount1Collected, 0);
+    }
+
+    function test_onDeposit_nonZeroBalanceZeroFees() public {
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        (uint256 amount0Collected, uint256 amount1Collected) = executor
+            .onDeposit(900e18, 1100e18);
+
+        (uint256 amount0, uint256 amount1) = executor.positionAmounts();
+
+        assertEq(executor.latestTokenId(), 2);
+        assertEq(amount0, 995752494671009102);
+        assertEq(amount1, 1004235758422338150160);
+
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        (amount0Collected, amount1Collected) = executor.onDeposit(
+            900e18,
+            1100e18
+        );
+
+        (amount0, amount1) = executor.positionAmounts();
+
+        assertEq(executor.latestTokenId(), 2);
+        assertEq(amount0Collected, 0);
+        assertEq(amount1Collected, 0);
+        assertEq(amount0, 1995557933376617342);
+        assertEq(amount1, 2004428332497739602742);
+    }
+
+    function test_onDeposit_nonZeroBalanceNonZeroFees() public {
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        (uint256 amount0Collected, uint256 amount1Collected) = executor
+            .onDeposit(900e18, 1100e18);
+
+        (uint256 amount0, uint256 amount1) = executor.positionAmounts();
+
+        assertEq(executor.latestTokenId(), 2);
+        assertEq(amount0, 995752494671009102);
+        assertEq(amount1, 1004235758422338150160);
+
+        _swapFromBob(true);
+
+        (amount0Collected, amount1Collected) = executor.onDeposit(
+            900e18,
+            1100e18
+        );
+
+        (amount0, amount1) = executor.positionAmounts();
+
+        assertEq(executor.latestTokenId(), 2);
+        assertEq(amount0, 1908691230425416280);
+        assertEq(amount1, 134415115353098754797);
+        assertEq(amount0Collected, 456470799282880);
+        assertEq(amount1Collected, 0);
+    }
 
     function test_onWithdraw_notOwner_revert() public {
         vm.prank(makeAddr("Alice"));
         vm.expectRevert();
-        executor.onWithdraw(0, address(0), false, false);
+        executor.onWithdraw(0, address(0));
     }
 
-    function test_onWithdraw() public {}
+    function test_onWithdraw_amountTooLarge_revert() public {
+        vm.expectRevert();
+        executor.onWithdraw(100e18 + 1, address(0));
+    }
+
+    function test_onWithdraw_zeroAmount_revert() public {
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        executor.exposed_addBalanceLiquidity(900e18, 1100e18);
+
+        vm.expectRevert();
+        executor.onWithdraw(0, address(0));
+    }
+
+    function test_onWithdraw_zeroAddress_revert() public {
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        executor.exposed_addBalanceLiquidity(900e18, 1100e18);
+
+        vm.expectRevert();
+        executor.onWithdraw(1e18, address(0));
+    }
+
+    function test_onWithdraw_zeroFees() public {
+        address bob = makeAddr("Bob");
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        executor.exposed_addBalanceLiquidity(900e18, 1100e18);
+
+        (
+            uint256 amount0Collected,
+            uint256 amount1Collected,
+            uint256 amount0,
+            uint256 amount1
+        ) = executor.onWithdraw(100e18, bob);
+
+        assertEq(amount0Collected, 0);
+        assertEq(amount1Collected, 0);
+        assertEq(token0.balanceOf(bob), amount0);
+        assertEq(token1.balanceOf(bob), amount1);
+        assertEq(token0.balanceOf(bob), 995752494671009102);
+        assertEq(token1.balanceOf(bob), 1004235758422338150160);
+    }
+
+    function test_onWithdraw() public {
+        address bob = makeAddr("Bob");
+        token0.mint(address(executor), 1e18);
+        token1.mint(address(executor), 1000e18);
+
+        executor.exposed_addBalanceLiquidity(900e18, 1100e18);
+
+        _swapFromBob(true);
+
+        uint256 bobBalance0After = token0.balanceOf(bob);
+        uint256 bobBalance1After = token1.balanceOf(bob);
+
+        (
+            uint256 amount0Collected,
+            uint256 amount1Collected,
+            uint256 amount0,
+            uint256 amount1
+        ) = executor.onWithdraw(100e18, bob);
+
+        assertEq(amount0Collected, 456470799282880);
+        assertEq(amount1Collected, 0);
+        assertEq(token0.balanceOf(bob), bobBalance0After + amount0);
+        assertEq(token1.balanceOf(bob), bobBalance1After + amount1);
+        assertEq(token0.balanceOf(bob), 1908691245357618704);
+        assertEq(token1.balanceOf(bob), 1087184977576663259351);
+    }
 }

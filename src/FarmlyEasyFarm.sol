@@ -196,11 +196,7 @@ contract FarmlyEasyFarm is
     }
 
     /// @inheritdoc IFarmlyEasyFarm
-    function withdraw(
-        uint256 _amount,
-        bool _isMinimizeTrading,
-        bool _zeroForOne
-    ) external override {
+    function withdraw(uint256 _amount) external override {
         uint256 totalSupplyBefore = totalSupply();
         uint256 totalUSDBefore = totalUSDValue();
 
@@ -212,10 +208,8 @@ contract FarmlyEasyFarm is
             uint256 amount0,
             uint256 amount1
         ) = executor.onWithdraw(
-                FarmlyFullMath.mulDiv(_amount, 1e18, totalSupplyBefore),
-                msg.sender,
-                _isMinimizeTrading,
-                _zeroForOne
+                FarmlyFullMath.mulDiv(_amount, 100e18, totalSupplyBefore),
+                msg.sender
             );
 
         _mintPerformanceFee(

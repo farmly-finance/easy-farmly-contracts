@@ -68,9 +68,7 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor, Ownable {
 
     function onWithdraw(
         uint256 _amount,
-        address _to,
-        bool _isMinimizeTrading,
-        bool _zeroForOne
+        address _to
     )
         external
         virtual

@@ -29,4 +29,4 @@ cd ../easy-farmly-contracts
 # forge script script/04_CreatePool.s.sol --rpc-url local --broadcast -vvvvv
 
 # Run tests
-forge test -vvv --rpc-url local 
+forge test -vvv --rpc-url local

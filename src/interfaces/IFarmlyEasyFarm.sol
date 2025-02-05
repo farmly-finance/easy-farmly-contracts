@@ -52,13 +52,7 @@ interface IFarmlyEasyFarm is IFarmlyPriceFeedLib {
     function deposit(uint256 _amount0, uint256 _amount1) external;
     /// @notice Withdraw
     /// @param _amount Amount of shares
-    /// @param _isMinimizeTrading Minimize trading
-    /// @param _zeroForOne Zero for one
-    function withdraw(
-        uint256 _amount,
-        bool _isMinimizeTrading,
-        bool _zeroForOne
-    ) external;
+    function withdraw(uint256 _amount) external;
 
     /// @notice Deposit event
     event Deposit(
