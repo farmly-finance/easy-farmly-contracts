@@ -14,6 +14,7 @@ abstract contract UniswapV3Fixture is Test {
     IUniswapV3Factory uniswapV3Factory;
     INonfungiblePositionManager nonfungiblePositionManager;
     ISwapRouter swapRouter;
+    IUniswapV3Pool pool;
     MockERC20Token token0;
     MockERC20Token token1;
     uint24 poolFee;
@@ -47,7 +48,7 @@ abstract contract UniswapV3Fixture is Test {
             (token0, token1) = (token1, token0);
         }
 
-        IUniswapV3Pool pool = IUniswapV3Pool(
+        pool = IUniswapV3Pool(
             uniswapV3Factory.createPool(
                 address(token0),
                 address(token1),
@@ -122,6 +123,34 @@ abstract contract UniswapV3Fixture is Test {
                 recipient: bob,
                 deadline: block.timestamp + 1000,
                 amountIn: 1e18,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.stopPrank();
+    }
+
+    function _swapFromBob(bool zeroForOne, uint256 amount) internal {
+        address bob = makeAddr("Bob");
+        if (zeroForOne) {
+            token0.mint(bob, amount);
+        } else {
+            token1.mint(bob, amount);
+        }
+        vm.startPrank(bob);
+        if (zeroForOne) {
+            token0.approve(address(swapRouter), amount);
+        } else {
+            token1.approve(address(swapRouter), amount);
+        }
+        swapRouter.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: zeroForOne ? address(token0) : address(token1),
+                tokenOut: zeroForOne ? address(token1) : address(token0),
+                fee: 500,
+                recipient: bob,
+                deadline: block.timestamp + 1000,
+                amountIn: amount,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })

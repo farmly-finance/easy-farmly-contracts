@@ -22,12 +22,16 @@ contract FarmlyEasyFarm is
     Ownable,
     Pausable
 {
+    /// @notice Invalid fee address
+    error InvalidFeeAddress();
     /// @notice Minimum deposit USD
     error MinimumDepositUSD();
     /// @notice Maximum capacity reached
     error MaximumCapacityReached();
     /// @notice Not upkeep needed
     error NotUpkeepNeeded();
+    /// @notice Withdraw zero amount
+    error WithdrawZeroAmount();
 
     /// @notice Price base
     uint256 public constant PRICE_BASE = 10 ** 18;
@@ -197,6 +201,7 @@ contract FarmlyEasyFarm is
 
     /// @inheritdoc IFarmlyEasyFarm
     function withdraw(uint256 _amount) external override {
+        if (_amount == 0) revert WithdrawZeroAmount();
         uint256 totalSupplyBefore = totalSupply();
         uint256 totalUSDBefore = totalUSDValue();
 
@@ -311,6 +316,7 @@ contract FarmlyEasyFarm is
 
     /// @inheritdoc IFarmlyEasyFarm
     function setFeeAddress(address _feeAddress) external onlyOwner {
+        if (_feeAddress == address(0)) revert InvalidFeeAddress();
         feeAddress = _feeAddress;
     }
 

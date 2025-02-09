@@ -20,7 +20,12 @@ contract FarmlyBollingerBandsStrategyTest is Test {
         uint256 rebalanceThreshold = 500;
 
         strategy = new FarmlyBollingerBandsStrategyHelper(
-            address(token0PriceFeed), address(token1PriceFeed), ma, std, period, rebalanceThreshold
+            address(token0PriceFeed),
+            address(token1PriceFeed),
+            ma,
+            std,
+            period,
+            rebalanceThreshold
         );
     }
 
@@ -120,13 +125,15 @@ contract FarmlyBollingerBandsStrategyTest is Test {
     }
 
     function test_calculateBollingerBands_pricesLengthLessThanMa() public {
-        (uint256 upperBand, uint256 sma, uint256 lowerBand) = strategy.exposed_calculateBollingerBands();
+        (uint256 upperBand, uint256 sma, uint256 lowerBand) = strategy
+            .exposed_calculateBollingerBands();
         assertEq(upperBand, 0);
         assertEq(sma, 0);
         assertEq(lowerBand, 0);
         vm.warp(101 hours);
         strategy.performUpkeep("");
-        (upperBand, sma, lowerBand) = strategy.exposed_calculateBollingerBands();
+        (upperBand, sma, lowerBand) = strategy
+            .exposed_calculateBollingerBands();
         assertEq(upperBand, 0);
         assertEq(sma, 0);
         assertEq(lowerBand, 0);
@@ -139,7 +146,8 @@ contract FarmlyBollingerBandsStrategyTest is Test {
             strategy.performUpkeep("");
         }
 
-        (uint256 upperBand, uint256 sma, uint256 lowerBand) = strategy.exposed_calculateBollingerBands();
+        (uint256 upperBand, uint256 sma, uint256 lowerBand) = strategy
+            .exposed_calculateBollingerBands();
         assertEq(upperBand, 1002.103256259467079588 * 1e18);
         assertEq(sma, 1000.95 * 1e18);
         assertEq(lowerBand, 999.796743740532920412 * 1e18);
@@ -152,7 +160,8 @@ contract FarmlyBollingerBandsStrategyTest is Test {
             strategy.performUpkeep("");
         }
 
-        (uint256 upperBand, uint256 sma, uint256 lowerBand) = strategy.exposed_calculateBollingerBands();
+        (uint256 upperBand, uint256 sma, uint256 lowerBand) = strategy
+            .exposed_calculateBollingerBands();
         assertEq(upperBand, 1002.203256259467079588 * 1e18);
         assertEq(sma, 1001.05 * 1e18);
         assertEq(lowerBand, 999.896743740532920412 * 1e18);
@@ -199,21 +208,21 @@ contract FarmlyBollingerBandsStrategyTest is Test {
 
     function test_checkUpkeep_false() public {
         vm.warp(101 hours - 1 seconds);
-        (bool upkeepNeeded,) = strategy.checkUpkeep("");
+        (bool upkeepNeeded, ) = strategy.checkUpkeep("");
         assertEq(upkeepNeeded, false);
     }
 
     function test_checkUpkeep_true() public {
         vm.warp(101 hours);
-        (bool upkeepNeeded,) = strategy.checkUpkeep("");
+        (bool upkeepNeeded, ) = strategy.checkUpkeep("");
         assertEq(upkeepNeeded, true);
         vm.warp(101 hours + 1 seconds);
-        (upkeepNeeded,) = strategy.checkUpkeep("");
+        (upkeepNeeded, ) = strategy.checkUpkeep("");
         assertEq(upkeepNeeded, true);
     }
 
     function test_performUpkeep_notUpkeepNeeded() public {
-        (bool upkeepNeeded,) = strategy.checkUpkeep("");
+        (bool upkeepNeeded, ) = strategy.checkUpkeep("");
         vm.expectRevert();
         strategy.performUpkeep("");
     }
@@ -240,7 +249,10 @@ contract FarmlyBollingerBandsStrategyTest is Test {
 
         assertEq(strategy.pricesLength(), 20);
         assertEq(strategy.latestTimestamp(), 100 hours + 20 hours);
-        assertEq(strategy.nextPeriodStartTimestamp(), 100 hours + 20 hours + 1 hours);
+        assertEq(
+            strategy.nextPeriodStartTimestamp(),
+            100 hours + 20 hours + 1 hours
+        );
         assertEq(strategy.latestPrice(), 1001.9e18);
         assertEq(strategy.latestLowerPrice(), 999.796743740532920412 * 1e18);
         assertEq(strategy.latestUpperPrice(), 1002.103256259467079588 * 1e18);
@@ -250,7 +262,9 @@ contract FarmlyBollingerBandsStrategyTest is Test {
         assertEq(strategy.prices(19), 1001.9e18);
     }
 
-    function test_performUpkeep_upkeepNeeded_pricesLengthGreaterThanMa() public {
+    function test_performUpkeep_upkeepNeeded_pricesLengthGreaterThanMa()
+        public
+    {
         for (uint256 i = 0; i < 21; i++) {
             vm.warp(block.timestamp + 1 hours);
             token0PriceFeed.setPrice(int256(1000e8 + i * 0.1e8));
@@ -259,7 +273,10 @@ contract FarmlyBollingerBandsStrategyTest is Test {
 
         assertEq(strategy.pricesLength(), 21);
         assertEq(strategy.latestTimestamp(), 100 hours + 21 hours);
-        assertEq(strategy.nextPeriodStartTimestamp(), 100 hours + 21 hours + 1 hours);
+        assertEq(
+            strategy.nextPeriodStartTimestamp(),
+            100 hours + 21 hours + 1 hours
+        );
         assertEq(strategy.latestPrice(), 1002.0e18);
         assertEq(strategy.latestLowerPrice(), 999.896743740532920412 * 1e18);
         assertEq(strategy.latestUpperPrice(), 1002.203256259467079588 * 1e18);
@@ -272,7 +289,10 @@ contract FarmlyBollingerBandsStrategyTest is Test {
     function test_isRebalanceNeeded() public {
         uint256 lowerPrice = 100;
         uint256 upperPrice = 100;
-        bool isRebalanceNeeded = strategy.isRebalanceNeeded(lowerPrice, upperPrice);
+        bool isRebalanceNeeded = strategy.isRebalanceNeeded(
+            lowerPrice,
+            upperPrice
+        );
 
         assert(isRebalanceNeeded);
     }
