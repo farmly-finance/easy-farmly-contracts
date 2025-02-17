@@ -171,9 +171,12 @@ contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
         );
     }
 
-    function test_decreasePosition_withoutMint_revert() public {
-        vm.expectRevert();
-        executor.exposed_decreasePosition(0);
+    function test_decreasePosition_withoutMint() public {
+        (uint256 amount0Decreased, uint256 amount1Decreased) = executor
+            .exposed_decreasePosition(0);
+
+        assertEq(amount0Decreased, 0);
+        assertEq(amount1Decreased, 0);
     }
 
     function test_decreasePosition_withZero_revert() public {

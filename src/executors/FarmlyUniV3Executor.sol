@@ -391,17 +391,19 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
     function decreasePosition(
         uint128 _liquidity
     ) internal returns (uint256 amount0, uint256 amount1) {
-        nonfungiblePositionManager.decreaseLiquidity(
-            INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: latestTokenId,
-                liquidity: _liquidity,
-                amount0Min: 0,
-                amount1Min: 0,
-                deadline: block.timestamp
-            })
-        );
+        if (latestTokenId != 0) {
+            nonfungiblePositionManager.decreaseLiquidity(
+                INonfungiblePositionManager.DecreaseLiquidityParams({
+                    tokenId: latestTokenId,
+                    liquidity: _liquidity,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    deadline: block.timestamp
+                })
+            );
 
-        (amount0, amount1) = collectFees();
+            (amount0, amount1) = collectFees();
+        }
     }
 
     /// @notice Mint position

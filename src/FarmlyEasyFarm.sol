@@ -124,8 +124,8 @@ contract FarmlyEasyFarm is
         }
 
         (latestLowerPrice, latestUpperPrice) = executor.nearestRange(
-            latestLowerPrice,
-            latestUpperPrice
+            strategy.latestLowerPrice(),
+            strategy.latestUpperPrice()
         );
 
         latestTimestamp = block.timestamp;

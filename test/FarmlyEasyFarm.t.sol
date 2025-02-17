@@ -472,6 +472,149 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.stopPrank();
     }
 
+    function test_performUpkeep_notUpkeepNeeded_revert() public {
+        vm.expectRevert();
+        easyFarm.performUpkeep("");
+    }
+
+    function test_performUpkeep_rebalanceNeeded_withoutMint() public {
+        vm.warp(block.timestamp + 1 hours);
+        token0PriceFeed.setPrice(int256(1001.9e8 + 20e8));
+        strategy.performUpkeep("");
+
+        easyFarm.performUpkeep("");
+
+        assertEq(easyFarm.latestLowerPrice(), 992924841638183881677);
+        assertEq(easyFarm.latestUpperPrice(), 1010958402291379433820);
+        assertEq(easyFarm.latestTimestamp(), block.timestamp);
+        assertEq(easyFarm.latestTimestamp(), 121 hours);
+        assertEq(easyFarm.totalSupply(), 0);
+        assertEq(easyFarm.totalUSDValue(), 0);
+        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 0);
+    }
+
+    function test_performUpkeep_rebalanceNeeded_withMint_zeroFees() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+        easyFarm.deposit(1e18, 100e18);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 hours);
+        token0PriceFeed.setPrice(int256(1001.9e8 + 15e8));
+        strategy.performUpkeep("");
+
+        easyFarm.performUpkeep("");
+
+        assertEq(easyFarm.latestLowerPrice(), 994912579011074907525);
+        assertEq(easyFarm.latestUpperPrice(), 1008938606943460321466);
+        assertEq(easyFarm.latestTimestamp(), 121 hours);
+        assertEq(easyFarm.totalSupply(), 1101.9e18);
+        assertEq(easyFarm.totalUSDValue(), 1116830138507565774744);
+        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 0);
+    }
+
+    function test_performUpkeep_rebalanceNeeded_withMint() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+        easyFarm.deposit(1e18, 100e18);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 hours);
+        token0PriceFeed.setPrice(int256(1001.9e8 + 15e8));
+        strategy.performUpkeep("");
+
+        _swapFromBob(true);
+        _swapFromBob(false);
+
+        easyFarm.performUpkeep("");
+
+        assertEq(easyFarm.latestLowerPrice(), 994912579011074907525);
+        assertEq(easyFarm.latestUpperPrice(), 1008938606943460321466);
+        assertEq(easyFarm.latestTimestamp(), 121 hours);
+        assertEq(easyFarm.totalSupply(), 1101910004136749194150);
+        assertEq(easyFarm.totalUSDValue(), 1118641702587282900748);
+        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 10004136749194150);
+    }
+
+    function test_totalUSDValue_withoutDeposits() public {
+        assertEq(easyFarm.totalUSDValue(), 0);
+    }
+
+    function test_totalUSDValue_withDeposits() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+        easyFarm.deposit(1e18, 100e18);
+        vm.stopPrank();
+
+        assertEq(easyFarm.totalUSDValue(), 1101900250026577799403);
+    }
+
+    function test_positionFeesUSD_withoutFees() public {
+        (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD) = easyFarm
+            .positionFeesUSD();
+
+        assertEq(amount0USD, 0);
+        assertEq(amount1USD, 0);
+        assertEq(totalUSD, 0);
+    }
+
+    function test_positionFeesUSD_withFees() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+        easyFarm.deposit(1e18, 100e18);
+        vm.stopPrank();
+
+        _swapFromBob(false);
+        _swapFromBob(true);
+
+        (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD) = easyFarm
+            .positionFeesUSD();
+
+        assertEq(amount0USD, 50531641888723603);
+        assertEq(amount1USD, 499113205276844);
+        assertEq(totalUSD, 51030755094000447);
+        assertEq(totalUSD, amount0USD + amount1USD);
+    }
+
+    function test_positionAmountsUSD_withoutAmounts() public {
+        (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD) = easyFarm
+            .positionAmountsUSD();
+
+        assertEq(amount0USD, 0);
+        assertEq(amount1USD, 0);
+        assertEq(totalUSD, 0);
+    }
+
+    function test_positionAmountsUSD_withAmounts() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+        easyFarm.deposit(1e18, 100e18);
+        vm.stopPrank();
+
+        (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD) = easyFarm
+            .positionAmountsUSD();
+
+        assertEq(amount0USD, 1002077697537605619951);
+        assertEq(amount1USD, 99822552488972179452);
+        assertEq(totalUSD, 1101900250026577799403);
+        assertEq(totalUSD, amount0USD + amount1USD);
+    }
+
     /*
     function _mintFullRangePosition() internal {
         token0.mint(alice, 1000e18);
