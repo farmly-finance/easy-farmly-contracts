@@ -285,6 +285,40 @@ contract FarmlyEasyReader {
         );
     }
 
+    function shareToAmounts(
+        IFarmlyEasyFarm farmlyEasyFarm,
+        uint256 amount
+    ) public view returns (uint256 amount0, uint256 amount1) {
+        // Calculate fees
+        (uint256 amount0Fee, uint256 amount1Fee) = calculateFees(
+            farmlyEasyFarm
+        );
+
+        // Get position info
+        Position memory positionInfo = getPositionInfo(
+            farmlyEasyFarm,
+            amount0Fee,
+            amount1Fee
+        );
+
+        // Calculate swap info and amounts
+        (
+            Swap memory swapInfo,
+            uint256 amount0Add,
+            uint256 amount1Add
+        ) = calculateSwapInfo(farmlyEasyFarm, positionInfo);
+
+        // Calculate liquidity and amounts
+        (amount0, amount1) = calculateLiquidityAmounts(
+            swapInfo,
+            positionInfo,
+            amount0Add,
+            amount1Add,
+            farmlyEasyFarm,
+            amount
+        );
+    }
+
     function calculateSwapInfo(
         IFarmlyEasyFarm farmlyEasyFarm,
         Position memory positionInfo
