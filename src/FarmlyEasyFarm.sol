@@ -128,7 +128,7 @@ contract FarmlyEasyFarm is
             strategy.latestUpperPrice()
         );
 
-        latestTimestamp = block.timestamp;
+        latestTimestamp = strategy.latestTimestamp();
         uint256 usdValueBefore = totalUSDValue();
 
         (uint256 amount0Collected, uint256 amount1Collected) = executor
@@ -139,6 +139,12 @@ contract FarmlyEasyFarm is
             amount1Collected,
             totalSupply(),
             usdValueBefore
+        );
+
+        emit PerformPosition(
+            latestLowerPrice,
+            latestUpperPrice,
+            latestTimestamp
         );
     }
 
