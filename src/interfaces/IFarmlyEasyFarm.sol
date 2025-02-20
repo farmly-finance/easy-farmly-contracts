@@ -70,11 +70,8 @@ interface IFarmlyEasyFarm is IFarmlyPriceFeedLib {
     );
     /// @notice Perform position event
     event PerformPosition(
-        uint256 amount0Added,
-        uint256 amount1Added,
-        uint256 upperPrice,
         uint256 lowerPrice,
-        uint256 sharePrice,
+        uint256 upperPrice,
         uint256 timestamp
     );
 
