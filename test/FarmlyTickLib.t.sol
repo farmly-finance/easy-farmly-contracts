@@ -11,9 +11,14 @@ contract FarmlyTickLibTest is Test {
     uint24 tickSpacing = 10;
 
     function test_getTick_success() public {
-        int24 tick = FarmlyTickLib.getTick(price, token0Decimal, token1Decimal, tickSpacing);
+        int24 tick = FarmlyTickLib.getTick(
+            price,
+            token0Decimal,
+            token1Decimal,
+            tickSpacing
+        );
 
-        assertEq(tick, -207250);
+        assertEq(tick, -207240);
     }
 
     function test_getTick_failure() public {
@@ -25,13 +30,22 @@ contract FarmlyTickLibTest is Test {
     }
 
     function test_decodeTick() public {
-        uint256 decodedPrice = FarmlyTickLib.decodeTick(-207250, token0Decimal, token1Decimal);
+        uint256 decodedPrice = FarmlyTickLib.decodeTick(
+            -207250,
+            token0Decimal,
+            token1Decimal
+        );
 
         assertEq(decodedPrice, 999302261000000000000);
     }
 
     function test_nearestPrice() public {
-        uint256 nearestPrice = FarmlyTickLib.nearestPrice(price, token0Decimal, token1Decimal, tickSpacing);
-        assertEq(nearestPrice, 999302261000000000000);
+        uint256 nearestPrice = FarmlyTickLib.nearestPrice(
+            price,
+            token0Decimal,
+            token1Decimal,
+            tickSpacing
+        );
+        assertEq(nearestPrice, 1000302013000000000000);
     }
 }

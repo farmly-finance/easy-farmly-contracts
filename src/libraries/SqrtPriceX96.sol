@@ -65,9 +65,16 @@ library SqrtPriceX96 {
         int24 tick_,
         uint24 tickSpacing
     ) internal pure returns (int24 result) {
+        bool tickIsNegative = tick_ < 0;
+        tick_ = tickIsNegative ? -tick_ : tick_;
+
         result =
             int24(divRound(int128(tick_), int128(int24(tickSpacing)))) *
             int24(tickSpacing);
+
+        if (tickIsNegative) {
+            result = -result;
+        }
 
         if (result < TickMath.MIN_TICK) {
             result += int24(tickSpacing);
