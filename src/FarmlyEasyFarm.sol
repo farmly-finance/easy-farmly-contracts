@@ -1,421 +1,357 @@
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-
-import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
+import {IFarmlyEasyFarm} from "./interfaces/IFarmlyEasyFarm.sol";
+import {IFarmlyBaseStrategy} from "./interfaces/base/IFarmlyBaseStrategy.sol";
+import {IFarmlyBaseExecutor} from "./interfaces/base/IFarmlyBaseExecutor.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-
-import {FarmlyTickLib} from "./libraries/FarmlyTickLib.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {FarmlyFullMath} from "./libraries/FarmlyFullMath.sol";
+import {FarmlyPriceFeedLib} from "./libraries/FarmlyPriceFeedLib.sol";
+import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 import {FarmlyTransferHelper} from "./libraries/FarmlyTransferHelper.sol";
-
-import {IPositionInfo} from "./interfaces/IPositionInfo.sol";
-import {IFarmlyUniV3Executor} from "./interfaces/IFarmlyUniV3Executor.sol";
-import {IFarmlyBollingerBands} from "./interfaces/IFarmlyBollingerBands.sol";
 
 contract FarmlyEasyFarm is
     AutomationCompatibleInterface,
-    Ownable,
-    Pausable,
+    IFarmlyEasyFarm,
     ERC20,
-    IPositionInfo
+    FarmlyPriceFeedLib,
+    Ownable,
+    Pausable
 {
-    uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
+    /// @notice Invalid fee address
+    error InvalidFeeAddress();
+    /// @notice Minimum deposit USD
+    error MinimumDepositUSD();
+    /// @notice Maximum capacity reached
+    error MaximumCapacityReached();
+    /// @notice Not upkeep needed
+    error NotUpkeepNeeded();
+    /// @notice Withdraw zero amount
+    error WithdrawZeroAmount();
+    /// @notice Slippage exceeded
+    error SlippageExceeded();
 
-    address public farmlyEasyFarmFactory;
+    /// @notice Price base
+    uint256 public constant PRICE_BASE = 10 ** 18;
+    /// @notice Performance fee denominator
+    uint256 public constant PERFORMANCE_FEE_DENOMINATOR = 100_000;
+    /// @inheritdoc IFarmlyEasyFarm
+    IFarmlyBaseStrategy public override strategy;
+    /// @inheritdoc IFarmlyEasyFarm
+    IFarmlyBaseExecutor public override executor;
 
-    IFarmlyUniV3Executor public farmlyUniV3Executor;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint256 public override latestUpperPrice;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint256 public override latestLowerPrice;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint256 public override latestTimestamp;
 
-    IFarmlyBollingerBands public farmlyBollingerBands;
+    /// @inheritdoc IFarmlyEasyFarm
+    address public override token0;
+    /// @inheritdoc IFarmlyEasyFarm
+    address public override token1;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint8 public override token0Decimals;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint8 public override token1Decimals;
 
-    AggregatorV3Interface public token0DataFeed;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint256 public override performanceFee;
+    /// @inheritdoc IFarmlyEasyFarm
+    address public override feeAddress;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint256 public override maximumCapacity;
+    /// @inheritdoc IFarmlyEasyFarm
+    uint256 public override minimumDepositUSD;
 
-    AggregatorV3Interface public token1DataFeed;
-
-    uint256 public latestUpperPrice;
-    uint256 public latestLowerPrice;
-    uint256 public latestTimestamp;
-
-    uint256 public positionThreshold; // %1 = 1000
-    uint256 public performanceFee; // %1 = 1000
-    address public feeAddress;
-    uint256 public maximumCapacity;
-
-    IERC20 public token0;
-    IERC20 public token1;
-
-    event Deposit(
-        uint256 amount0,
-        uint256 amount1,
-        uint256 shareAmount,
-        uint256 depositUSD
-    );
-
-    event Withdraw(uint256 amount0, uint256 amount1, uint256 shareAmount);
-
-    event PerformPosition(
-        uint256 amount0Added,
-        uint256 amount1Added,
-        uint256 upperPrice,
-        uint256 lowerPrice,
-        uint256 sharePrice,
-        uint256 timestamp
-    );
-
+    /// @notice Constructor
+    /// @param _shareTokenName Name of the share token
+    /// @param _shareTokenSymbol Symbol of the share token
+    /// @param _strategy Strategy of the farm
+    /// @param _executor Executor of the farm
+    /// @param _token0DataFeed Token 0 data feed
+    /// @param _token1DataFeed Token 1 data feed
     constructor(
         string memory _shareTokenName,
         string memory _shareTokenSymbol,
-        uint256 _maximumCapacity,
-        address _farmlyBollingerBands,
-        address _farmlyUniV3Executor
-    ) ERC20(_shareTokenName, _shareTokenSymbol) {
-        farmlyEasyFarmFactory = msg.sender;
+        address _strategy,
+        address _executor,
+        address _token0,
+        address _token1,
+        address _token0DataFeed,
+        address _token1DataFeed
+    )
+        FarmlyPriceFeedLib(_token0DataFeed, _token1DataFeed)
+        ERC20(_shareTokenName, _shareTokenSymbol)
+    {
+        strategy = IFarmlyBaseStrategy(_strategy);
 
-        farmlyBollingerBands = IFarmlyBollingerBands(_farmlyBollingerBands);
+        executor = IFarmlyBaseExecutor(_executor);
 
-        farmlyUniV3Executor = IFarmlyUniV3Executor(_farmlyUniV3Executor);
-
-        token0 = IERC20(farmlyUniV3Executor.token0());
-
-        token1 = IERC20(farmlyUniV3Executor.token1());
-
-        token0DataFeed = AggregatorV3Interface(
-            farmlyBollingerBands.token0DataFeed()
-        );
-        token1DataFeed = AggregatorV3Interface(
-            farmlyBollingerBands.token1DataFeed()
+        (latestLowerPrice, latestUpperPrice) = executor.nearestRange(
+            strategy.latestLowerPrice(),
+            strategy.latestUpperPrice()
         );
 
-        latestLowerPrice = FarmlyTickLib.nearestPrice(
-            farmlyBollingerBands.latestLowerBand(),
-            IERC20Metadata(address(token0)).decimals(),
-            IERC20Metadata(address(token1)).decimals(),
-            farmlyUniV3Executor.tickSpacing()
+        token0 = _token0;
+
+        token1 = _token1;
+
+        token0Decimals = IERC20Metadata(token0).decimals();
+
+        token1Decimals = IERC20Metadata(token1).decimals();
+    }
+
+    /// @inheritdoc AutomationCompatibleInterface
+    function checkUpkeep(
+        bytes calldata /* checkData */
+    ) external view returns (bool upkeepNeeded, bytes memory performData) {
+        upkeepNeeded = strategy.isRebalanceNeeded(
+            latestLowerPrice,
+            latestUpperPrice
+        );
+    }
+
+    /// @inheritdoc AutomationCompatibleInterface
+    function performUpkeep(
+        bytes calldata /* performData */
+    ) external override whenNotPaused {
+        if (!strategy.isRebalanceNeeded(latestLowerPrice, latestUpperPrice)) {
+            revert NotUpkeepNeeded();
+        }
+
+        (latestLowerPrice, latestUpperPrice) = executor.nearestRange(
+            strategy.latestLowerPrice(),
+            strategy.latestUpperPrice()
         );
 
-        latestUpperPrice = FarmlyTickLib.nearestPrice(
-            farmlyBollingerBands.latestUpperBand(),
-            IERC20Metadata(address(token0)).decimals(),
-            IERC20Metadata(address(token1)).decimals(),
-            farmlyUniV3Executor.tickSpacing()
+        latestTimestamp = strategy.latestTimestamp();
+        uint256 usdValueBefore = totalUSDValue();
+
+        (uint256 amount0Collected, uint256 amount1Collected) = executor
+            .onRebalance(latestLowerPrice, latestUpperPrice);
+
+        _mintPerformanceFee(
+            amount0Collected,
+            amount1Collected,
+            totalSupply(),
+            usdValueBefore
         );
-
-        latestTimestamp =
-            farmlyBollingerBands.nextPeriodStartTimestamp() -
-            farmlyBollingerBands.period();
-
-        feeAddress = msg.sender;
-
-        maximumCapacity = _maximumCapacity;
 
         emit PerformPosition(
-            0,
-            0,
-            latestUpperPrice,
             latestLowerPrice,
-            sharePrice(),
+            latestUpperPrice,
             latestTimestamp
         );
     }
 
-    function checkUpkeep(
-        bytes calldata /* checkData */
-    ) external view override returns (bool upkeepNeeded, bytes memory) {
-        uint256 latestUpperBand = farmlyBollingerBands.latestUpperBand();
-        uint256 latestLowerBand = farmlyBollingerBands.latestLowerBand();
-        upkeepNeeded = isUpkeepNeeded(latestUpperBand, latestLowerBand);
-    }
-
-    function isUpkeepNeeded(
-        uint256 upperBand,
-        uint256 lowerBand
-    ) internal view returns (bool) {
-        uint256 nextTimestamp = latestTimestamp + farmlyBollingerBands.period();
-
-        uint256 upperThreshold = FarmlyFullMath.mulDiv(
-            latestUpperPrice,
-            positionThreshold,
-            THRESHOLD_DENOMINATOR
-        );
-        uint256 lowerThreshold = FarmlyFullMath.mulDiv(
-            latestLowerPrice,
-            positionThreshold,
-            THRESHOLD_DENOMINATOR
-        );
-
-        bool periodPassed = block.timestamp > nextTimestamp &&
-            nextTimestamp != farmlyBollingerBands.nextPeriodStartTimestamp();
-
-        bool upperNeeded = (upperBand < latestUpperPrice - upperThreshold) ||
-            (upperBand > latestUpperPrice + upperThreshold);
-
-        bool lowerNeeded = (lowerBand < latestLowerPrice - lowerThreshold) ||
-            (lowerBand > latestLowerPrice + lowerThreshold);
-
-        return (upperNeeded || lowerNeeded) && periodPassed;
-    }
-
-    function performUpkeep(
-        bytes calldata /* performData */
+    /// @inheritdoc IFarmlyEasyFarm
+    function deposit(
+        uint256 _amount0,
+        uint256 _amount1,
+        uint256 _minShareAmount
     ) external override whenNotPaused {
-        uint256 lowerBand = farmlyBollingerBands.latestLowerBand();
-        uint256 upperBand = farmlyBollingerBands.latestUpperBand();
-        uint256 _usdValueBefore = totalUSDValue();
+        uint256 totalSupplyBefore = totalSupply();
+        uint256 totalUSDBefore = totalUSDValue();
 
-        if (isUpkeepNeeded(upperBand, lowerBand)) {
-            (
-                uint256 amount0Collected,
-                uint256 amount1Collected,
-                uint256 amount0Added,
-                uint256 amount1Added
-            ) = farmlyUniV3Executor.onPerformUpkeep(lowerBand, upperBand);
+        (, , uint256 userDepositUSD) = tokensUSDValue(_amount0, _amount1);
 
-            latestUpperPrice = FarmlyTickLib.nearestPrice(
-                upperBand,
-                IERC20Metadata(address(token0)).decimals(),
-                IERC20Metadata(address(token1)).decimals(),
-                farmlyUniV3Executor.tickSpacing()
-            );
+        if (userDepositUSD < minimumDepositUSD) {
+            revert MinimumDepositUSD();
+        }
 
-            latestLowerPrice = FarmlyTickLib.nearestPrice(
-                lowerBand,
-                IERC20Metadata(address(token0)).decimals(),
-                IERC20Metadata(address(token1)).decimals(),
-                farmlyUniV3Executor.tickSpacing()
-            );
+        if (totalUSDBefore + userDepositUSD > maximumCapacity) {
+            revert MaximumCapacityReached();
+        }
 
-            latestTimestamp =
-                farmlyBollingerBands.nextPeriodStartTimestamp() -
-                farmlyBollingerBands.period();
-
-            _mintPerformanceFee(
-                amount0Collected,
-                amount1Collected,
-                totalSupply(),
-                _usdValueBefore
-            );
-
-            emit PerformPosition(
-                amount0Added,
-                amount1Added,
-                latestUpperPrice,
-                latestLowerPrice,
-                sharePrice(),
-                latestTimestamp
+        if (_amount0 > 0) {
+            FarmlyTransferHelper.safeTransferFrom(
+                token0,
+                msg.sender,
+                address(executor),
+                _amount0
             );
         }
-    }
-
-    function deposit(uint256 amount0, uint256 amount1) public whenNotPaused {
-        uint256 _totalSupplyBefore = totalSupply();
-        uint256 _usdValueBefore = totalUSDValue();
-
-        (, , uint256 userDepositUSD) = tokensUSD(amount0, amount1);
-
-        require(userDepositUSD + _usdValueBefore <= maximumCapacity);
-
-        if (amount0 > 0)
+        if (_amount1 > 0) {
             FarmlyTransferHelper.safeTransferFrom(
-                address(token0),
+                token1,
                 msg.sender,
-                address(farmlyUniV3Executor),
-                amount0
+                address(executor),
+                _amount1
             );
+        }
 
-        if (amount1 > 0)
-            FarmlyTransferHelper.safeTransferFrom(
-                address(token1),
-                msg.sender,
-                address(farmlyUniV3Executor),
-                amount1
-            );
+        (uint256 amount0Collected, uint256 amount1Collected) = executor
+            .onDeposit(latestLowerPrice, latestUpperPrice);
 
-        (
-            uint256 amount0Collected,
-            uint256 amount1Collected
-        ) = farmlyUniV3Executor.onDeposit(latestLowerPrice, latestUpperPrice);
-
-        uint256 shareAmount = _totalSupplyBefore == 0
+        uint256 shareAmount = totalSupplyBefore == 0
             ? userDepositUSD
             : FarmlyFullMath.mulDiv(
                 userDepositUSD,
-                _totalSupplyBefore,
-                _usdValueBefore
+                totalSupplyBefore,
+                totalUSDBefore
             );
+
+        if (shareAmount < _minShareAmount) revert SlippageExceeded();
 
         _mint(msg.sender, shareAmount);
         _mintPerformanceFee(
             amount0Collected,
             amount1Collected,
-            _totalSupplyBefore,
-            _usdValueBefore
+            totalSupplyBefore,
+            totalUSDBefore
         );
 
-        emit Deposit(amount0, amount1, shareAmount, userDepositUSD);
+        emit Deposit(_amount0, _amount1, shareAmount, userDepositUSD);
     }
 
-    function withdraw(
-        uint256 amount,
-        bool isMinimizeTrading,
-        bool zeroForOne
-    ) public {
-        uint256 _supplyBefore = totalSupply();
-        uint256 _usdValueBefore = totalUSDValue();
+    /// @inheritdoc IFarmlyEasyFarm
+    function withdraw(uint256 _amount, uint256 _minUSDValue) external override {
+        if (_amount == 0) revert WithdrawZeroAmount();
+        uint256 totalSupplyBefore = totalSupply();
+        uint256 totalUSDBefore = totalUSDValue();
 
-        _burn(msg.sender, amount);
+        _burn(msg.sender, _amount);
 
         (
             uint256 amount0Collected,
             uint256 amount1Collected,
             uint256 amount0,
             uint256 amount1
-        ) = farmlyUniV3Executor.onWithdraw(
-                amount,
-                _supplyBefore,
-                msg.sender,
-                isMinimizeTrading,
-                zeroForOne
+        ) = executor.onWithdraw(
+                FarmlyFullMath.mulDiv(_amount, 100e18, totalSupplyBefore),
+                msg.sender
             );
 
         _mintPerformanceFee(
             amount0Collected,
             amount1Collected,
-            _supplyBefore,
-            _usdValueBefore
+            totalSupplyBefore,
+            totalUSDBefore
         );
 
-        emit Withdraw(amount0, amount1, amount);
+        (, , uint256 withdrawUSD) = tokensUSDValue(amount0, amount1);
+
+        if (withdrawUSD < _minUSDValue) revert SlippageExceeded();
+
+        emit Withdraw(amount0, amount1, _amount, withdrawUSD);
     }
 
-    function getLatestPrices()
-        internal
-        view
-        returns (uint256 token0Price, uint256 token1Price)
-    {
-        (, int256 token0Answer, , , ) = token0DataFeed.latestRoundData();
+    /// @inheritdoc IFarmlyEasyFarm
+    function totalUSDValue() public view returns (uint256 usdValue) {
+        (, , uint256 positionFeesTotal) = positionFeesUSD();
+        (, , uint256 positionUSD) = positionAmountsUSD();
 
-        (, int256 token1Answer, , , ) = token1DataFeed.latestRoundData();
-
-        token0Price = FarmlyFullMath.mulDiv(
-            uint256(token0Answer),
-            1e18,
-            10 ** token0DataFeed.decimals()
-        );
-
-        token1Price = FarmlyFullMath.mulDiv(
-            uint256(token1Answer),
-            1e18,
-            10 ** token1DataFeed.decimals()
-        );
+        usdValue = positionUSD + positionFeesTotal;
     }
 
+    /// @inheritdoc IFarmlyEasyFarm
     function positionFeesUSD()
         public
         view
         returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD)
     {
-        (uint256 amount0, uint256 amount1) = farmlyUniV3Executor.positionFees();
+        (uint256 amount0, uint256 amount1) = executor.positionFees();
 
-        (amount0USD, amount1USD, totalUSD) = tokensUSD(amount0, amount1);
+        (amount0USD, amount1USD, totalUSD) = tokensUSDValue(amount0, amount1);
     }
 
+    /// @inheritdoc IFarmlyEasyFarm
     function positionAmountsUSD()
         public
         view
         returns (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD)
     {
-        (uint256 amount0, uint256 amount1) = farmlyUniV3Executor
-            .positionAmounts();
+        (uint256 amount0, uint256 amount1) = executor.positionAmounts();
 
-        (amount0USD, amount1USD, totalUSD) = tokensUSD(amount0, amount1);
+        (amount0USD, amount1USD, totalUSD) = tokensUSDValue(amount0, amount1);
     }
 
-    function totalUSDValue() public view returns (uint256 usdValue) {
-        (, , uint256 positionFeesTotal) = positionFeesUSD();
-
-        (, , uint256 positionAmountsTotal) = positionAmountsUSD();
-
-        usdValue = positionFeesTotal + positionAmountsTotal;
-    }
-
-    function sharePrice() public view returns (uint256) {
-        if (totalSupply() == 0) {
-            return 1e18;
-        }
-
-        return FarmlyFullMath.mulDiv(totalUSDValue(), 1e18, totalSupply());
-    }
-
-    function tokensUSD(
-        uint256 amount0,
-        uint256 amount1
+    function tokensUSDValue(
+        uint256 _amount0,
+        uint256 _amount1
     )
         internal
         view
         returns (uint256 token0USD, uint256 token1USD, uint256 totalUSD)
     {
-        (uint256 token0Price, uint256 token1Price) = getLatestPrices();
+        (uint256 token0Price, uint256 token1Price) = _tokenPrices();
 
         token0USD = FarmlyFullMath.mulDiv(
-            amount0,
+            _amount0,
             token0Price,
-            10 ** IERC20Metadata(farmlyUniV3Executor.token0()).decimals()
+            10 ** token0Decimals
         );
-
         token1USD = FarmlyFullMath.mulDiv(
-            amount1,
+            _amount1,
             token1Price,
-            10 ** IERC20Metadata(farmlyUniV3Executor.token1()).decimals()
+            10 ** token1Decimals
         );
 
         totalUSD = token0USD + token1USD;
     }
 
     function _mintPerformanceFee(
-        uint256 amount0,
-        uint256 amount1,
-        uint256 _totalSupply,
-        uint256 _usdValue
+        uint256 _amount0,
+        uint256 _amount1,
+        uint256 _totalSupplyBefore,
+        uint256 _totalUSDBefore
     ) internal {
-        (, , uint256 totalUSD) = tokensUSD(
-            FarmlyFullMath.mulDiv(
-                amount0,
-                performanceFee,
-                THRESHOLD_DENOMINATOR
-            ),
-            FarmlyFullMath.mulDiv(
-                amount1,
-                performanceFee,
-                THRESHOLD_DENOMINATOR
-            )
+        if (_amount0 == 0 && _amount1 == 0) return;
+        (, , uint256 totalUSD) = tokensUSDValue(_amount0, _amount1);
+
+        uint256 performanceFeeUSD = FarmlyFullMath.mulDiv(
+            totalUSD,
+            performanceFee,
+            PERFORMANCE_FEE_DENOMINATOR
         );
 
-        uint256 shareAmount = _totalSupply == 0
-            ? totalUSD
-            : FarmlyFullMath.mulDiv(totalUSD, _totalSupply, _usdValue);
+        uint256 shareAmount = _totalSupplyBefore == 0
+            ? performanceFeeUSD
+            : FarmlyFullMath.mulDiv(
+                performanceFeeUSD,
+                _totalSupplyBefore,
+                _totalUSDBefore
+            );
 
         if (shareAmount > 0) _mint(feeAddress, shareAmount);
     }
 
-    function setPositionThreshold(uint256 _threshold) public onlyOwner {
-        positionThreshold = _threshold;
+    /// @inheritdoc IFarmlyEasyFarm
+    function setPerformanceFee(uint256 _performanceFee) external onlyOwner {
+        performanceFee = _performanceFee;
     }
 
-    function setFeeAddress(address _feeAddress) public onlyOwner {
+    /// @inheritdoc IFarmlyEasyFarm
+    function setFeeAddress(address _feeAddress) external onlyOwner {
+        if (_feeAddress == address(0)) revert InvalidFeeAddress();
         feeAddress = _feeAddress;
     }
 
-    function setPerformanceFee(uint256 _fee) public onlyOwner {
-        performanceFee = _fee;
+    /// @inheritdoc IFarmlyEasyFarm
+    function setMaximumCapacity(uint256 _maximumCapacity) external onlyOwner {
+        maximumCapacity = _maximumCapacity;
     }
 
-    function pause() public onlyOwner whenNotPaused {
+    /// @inheritdoc IFarmlyEasyFarm
+    function setMinimumDepositUSD(
+        uint256 _minimumDepositUSD
+    ) external onlyOwner {
+        minimumDepositUSD = _minimumDepositUSD;
+    }
+
+    /// @notice Pause the farm
+    function pause() external onlyOwner whenNotPaused {
         _pause();
     }
 
-    function unpause() public onlyOwner whenPaused {
+    /// @notice Unpause the farm
+    function unpause() external onlyOwner whenPaused {
         _unpause();
     }
 }

@@ -2,14 +2,14 @@ pragma solidity 0.8.19;
 
 import "@uniswap/v3-core/contracts/libraries/FixedPoint96.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
-import {SafeCastUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/math/SafeCastUpgradeable.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {FarmlyFullMath} from "./FarmlyFullMath.sol";
 
 library SqrtPriceX96 {
     int128 private constant MIN_64x64 = -0x80000000000000000000000000000000;
     int128 private constant MAX_64x64 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
-    using SafeCastUpgradeable for uint256;
+    using SafeCast for uint256;
 
     function decodeSqrtPriceX96(
         uint160 _sqrtPriceX96,
@@ -65,9 +65,16 @@ library SqrtPriceX96 {
         int24 tick_,
         uint24 tickSpacing
     ) internal pure returns (int24 result) {
+        bool tickIsNegative = tick_ < 0;
+        tick_ = tickIsNegative ? -tick_ : tick_;
+
         result =
             int24(divRound(int128(tick_), int128(int24(tickSpacing)))) *
             int24(tickSpacing);
+
+        if (tickIsNegative) {
+            result = -result;
+        }
 
         if (result < TickMath.MIN_TICK) {
             result += int24(tickSpacing);

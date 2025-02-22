@@ -1,66 +1,129 @@
-## Foundry
+# Easy Farmly Contracts
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Farmly Finance is an innovative platform that simplifies liquidity management for DeFi users. With advanced strategies for concentrated liquidity, we enable users to provide liquidity effortlessly with just one click.
 
-Foundry consists of:
+## Overview
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+The project consists of several key components:
 
-## Documentation
+- **FarmlyEasyFarm**: The main contract that handles user deposits and automated liquidity management
+- **Strategies**: Smart liquidity management strategies (e.g., Bollinger Bands) that optimize liquidity ranges
+- **Executors**: Contracts that handle liquidity position management
+- **Readers**: Contracts for reading on-chain data and price feeds to inform strategy decisions
 
-https://book.getfoundry.sh/
+## Features
 
-## Usage
+- One-click liquidity provision
+- Advanced concentrated liquidity management strategies
+- Smart range optimization using Bollinger Bands
+- Integration with Uniswap V3 for efficient liquidity management
+- Chainlink price feeds for reliable price data
+- Chainlink Automation for strategy execution
+- Modular architecture allowing new strategies and executors to be added
+- Built-in safety features and pausability
 
-### Build
+## Prerequisites
 
-```shell
-$ forge build
+- [Foundry](https://book.getfoundry.sh/getting-started/installation)
+- [Node.js](https://nodejs.org/) (for development tools)
+
+## Installation
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/farmly-finance/easy-farmly-contracts.git
+cd easy-farmly-contracts
 ```
 
-### Test
+2. Install dependencies:
 
-```shell
-$ forge test
+```bash
+forge install
 ```
 
-### Format
+3. Create a `.env` file with required environment variables:
 
-```shell
-$ forge fmt
+```
+SEPOLIA_RPC_URL=
+BASE_SEPOLIA_RPC_URL=
+PRIVATE_KEY=
+ETHERSCAN_API_KEY=
 ```
 
-### Gas Snapshots
+## Testing
 
-```shell
-$ forge snapshot
+You can run tests in two ways:
+
+### Using test.sh Script
+
+The project includes a `test.sh` script that handles the complete test setup and execution:
+
+```bash
+./test.sh
 ```
 
-### Anvil
+This script will:
 
-```shell
-$ anvil
+1. Create necessary deployment directories
+2. Handle Uniswap V3 deployments
+3. Run the full test suite using Forge
+
+### Manual Testing
+
+Alternatively, you can run tests directly using Forge:
+
+```bash
+forge test
 ```
 
-### Deploy
+Run specific tests:
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```bash
+forge test --match-contract FarmlyBollingerBandsStrategy
 ```
 
-### Cast
+## Deployment
 
-```shell
-$ cast <subcommand>
+Deploy to local network:
+
+```bash
+forge script script/FarmlyEasyFarm.s.sol --rpc-url local
 ```
 
-### Help
+Deploy to testnet (Sepolia):
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+```bash
+forge script script/FarmlyEasyFarm.s.sol --rpc-url sepolia
 ```
+
+## Project Structure
+
+```
+src/
+├── FarmlyEasyFarm.sol    # Main contract
+├── strategies/           # Liquidity management strategies
+├── executors/           # Dex execution implementations
+├── interfaces/          # Contract interfaces
+├── libraries/           # Utility libraries
+└── readers/            # Data reading contracts
+```
+
+## Security
+
+- All contracts use OpenZeppelin's security contracts
+- Built-in pause functionality for emergency situations
+- Comprehensive test coverage
+- Multiple security checks and validations
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 or later - see the [LICENSE](LICENSE) file for details.
