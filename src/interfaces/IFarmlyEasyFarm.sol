@@ -49,10 +49,16 @@ interface IFarmlyEasyFarm is IFarmlyPriceFeedLib {
     /// @notice Deposit
     /// @param _amount0 Amount of token 0
     /// @param _amount1 Amount of token 1
-    function deposit(uint256 _amount0, uint256 _amount1) external;
+    /// @param _minShareAmount Minimum share amount
+    function deposit(
+        uint256 _amount0,
+        uint256 _amount1,
+        uint256 _minShareAmount
+    ) external;
     /// @notice Withdraw
     /// @param _amount Amount of shares
-    function withdraw(uint256 _amount) external;
+    /// @param _minUSDValue Minimum USD value
+    function withdraw(uint256 _amount, uint256 _minUSDValue) external;
 
     /// @notice Deposit event
     event Deposit(

@@ -32,6 +32,8 @@ contract FarmlyEasyFarm is
     error NotUpkeepNeeded();
     /// @notice Withdraw zero amount
     error WithdrawZeroAmount();
+    /// @notice Slippage exceeded
+    error SlippageExceeded();
 
     /// @notice Price base
     uint256 public constant PRICE_BASE = 10 ** 18;
@@ -151,7 +153,8 @@ contract FarmlyEasyFarm is
     /// @inheritdoc IFarmlyEasyFarm
     function deposit(
         uint256 _amount0,
-        uint256 _amount1
+        uint256 _amount1,
+        uint256 _minShareAmount
     ) external override whenNotPaused {
         uint256 totalSupplyBefore = totalSupply();
         uint256 totalUSDBefore = totalUSDValue();
@@ -194,6 +197,8 @@ contract FarmlyEasyFarm is
                 totalUSDBefore
             );
 
+        if (shareAmount < _minShareAmount) revert SlippageExceeded();
+
         _mint(msg.sender, shareAmount);
         _mintPerformanceFee(
             amount0Collected,
@@ -206,7 +211,7 @@ contract FarmlyEasyFarm is
     }
 
     /// @inheritdoc IFarmlyEasyFarm
-    function withdraw(uint256 _amount) external override {
+    function withdraw(uint256 _amount, uint256 _minUSDValue) external override {
         if (_amount == 0) revert WithdrawZeroAmount();
         uint256 totalSupplyBefore = totalSupply();
         uint256 totalUSDBefore = totalUSDValue();
@@ -231,6 +236,8 @@ contract FarmlyEasyFarm is
         );
 
         (, , uint256 withdrawUSD) = tokensUSDValue(amount0, amount1);
+
+        if (withdrawUSD < _minUSDValue) revert SlippageExceeded();
 
         emit Withdraw(amount0, amount1, _amount, withdrawUSD);
     }

@@ -207,7 +207,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         token1.mint(alice, 100e18);
         vm.startPrank(alice);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(0, 100e18);
+        easyFarm.deposit(0, 100e18, 0);
         vm.stopPrank();
 
         uint256 totalSupplyBefore = easyFarm.totalSupply();
@@ -232,7 +232,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         token0.mint(alice, 1e18);
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
-        easyFarm.deposit(1e18, 0);
+        easyFarm.deposit(1e18, 0, 0);
         vm.stopPrank();
 
         uint256 totalSupplyBefore = easyFarm.totalSupply();
@@ -259,7 +259,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
         vm.stopPrank();
 
         uint256 totalSupplyBefore = easyFarm.totalSupply();
@@ -324,7 +324,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(0.5e18, 50e18);
+        easyFarm.deposit(0.5e18, 50e18, 0);
         vm.stopPrank();
 
         assertEq(easyFarm.balanceOf(alice), 550.95e18);
@@ -335,7 +335,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(john);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(0.5e18, 50e18);
+        easyFarm.deposit(0.5e18, 50e18, 0);
         vm.stopPrank();
 
         assertEq(easyFarm.balanceOf(john), 550949750387902151710);
@@ -356,11 +356,11 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
             .positionFeesUSD();
 
         vm.startPrank(alice);
-        easyFarm.deposit(0.5e18, 50e18);
+        easyFarm.deposit(0.5e18, 50e18, 0);
         vm.stopPrank();
 
         vm.startPrank(john);
-        easyFarm.deposit(0.5e18, 50e18);
+        easyFarm.deposit(0.5e18, 50e18, 0);
         vm.stopPrank();
 
         assertEq(easyFarm.balanceOf(alice), 1101910972251178612918);
@@ -378,28 +378,54 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
 
     function test_deposit_zeroAmounts_revert() public {
         vm.expectRevert();
-        easyFarm.deposit(0, 0);
+        easyFarm.deposit(0, 0, 0);
+    }
+
+    function test_deposit_slippageNotExceeded() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+        (, , uint256 totalUSD) = easyFarm.exposed_tokensUSDValue(1e18, 100e18);
+
+        easyFarm.deposit(1e18, 100e18, totalUSD);
+        vm.stopPrank();
+    }
+
+    function test_deposit_slippageExceeded_revert() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+
+        (, , uint256 totalUSD) = easyFarm.exposed_tokensUSDValue(1e18, 100e18);
+
+        vm.expectRevert();
+        easyFarm.deposit(1e18, 100e18, totalUSD + 1);
+        vm.stopPrank();
     }
 
     function test_deposit_paused_revert() public {
         easyFarm.pause();
 
         vm.expectRevert();
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
     }
 
     function test_deposit_minimumDepositUSD_revert() public {
         uint256 minimumDepositUSD = easyFarm.minimumDepositUSD();
 
         vm.expectRevert();
-        easyFarm.deposit(0, minimumDepositUSD - 1);
+        easyFarm.deposit(0, minimumDepositUSD - 1, 0);
     }
 
     function test_deposit_maximumCapacity_revert() public {
         uint256 maximumCapacity = easyFarm.maximumCapacity();
 
         vm.expectRevert();
-        easyFarm.deposit(0, maximumCapacity + 1);
+        easyFarm.deposit(0, maximumCapacity + 1, 0);
     }
 
     function test_withdraw() public {
@@ -408,7 +434,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
         vm.stopPrank();
 
         token0.mint(john, 1e18);
@@ -416,18 +442,18 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(john);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
         vm.stopPrank();
 
         _swapFromBob(true);
         _swapFromBob(false, 300e18);
 
         vm.startPrank(alice);
-        easyFarm.withdraw(easyFarm.balanceOf(alice));
+        easyFarm.withdraw(easyFarm.balanceOf(alice), 0);
         vm.stopPrank();
 
         vm.startPrank(john);
-        easyFarm.withdraw(easyFarm.balanceOf(john));
+        easyFarm.withdraw(easyFarm.balanceOf(john), 0);
         vm.stopPrank();
 
         assertEq(easyFarm.balanceOf(alice), 0);
@@ -444,13 +470,62 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         assertEq(easyFarm.totalUSDValue(), 40015077265156601);
     }
 
+    function test_withdraw_slippageNotExceeded() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
+        vm.stopPrank();
+
+        uint256 balance = easyFarm.balanceOf(alice);
+        uint256 totalUSD = easyFarm.totalUSDValue();
+        uint256 totalSupply = easyFarm.totalSupply();
+
+        uint256 expected = FarmlyFullMath.mulDiv(
+            totalUSD,
+            balance,
+            totalSupply
+        );
+
+        vm.startPrank(alice);
+        easyFarm.withdraw(balance, expected);
+        vm.stopPrank();
+    }
+
+    function test_withdraw_slippageExceeded_revert() public {
+        token0.mint(alice, 1e18);
+        token1.mint(alice, 100e18);
+        vm.startPrank(alice);
+        token0.approve(address(easyFarm), 1e18);
+        token1.approve(address(easyFarm), 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
+        vm.stopPrank();
+
+        uint256 balance = easyFarm.balanceOf(alice);
+        uint256 totalUSD = easyFarm.totalUSDValue();
+        uint256 totalSupply = easyFarm.totalSupply();
+
+        uint256 expected = FarmlyFullMath.mulDiv(
+            totalUSD,
+            balance,
+            totalSupply
+        );
+
+        vm.startPrank(alice);
+        vm.expectRevert();
+        easyFarm.withdraw(balance, expected + 1);
+        vm.stopPrank();
+    }
+
     function test_withdraw_zeroAmounts_revert() public {
         token0.mint(alice, 1e18);
         token1.mint(alice, 100e18);
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(0.5e18, 50e18);
+        easyFarm.deposit(0.5e18, 50e18, 0);
         vm.stopPrank();
 
         token0.mint(john, 1e18);
@@ -458,17 +533,17 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(john);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(0.5e18, 50e18);
+        easyFarm.deposit(0.5e18, 50e18, 0);
         vm.stopPrank();
 
         vm.startPrank(alice);
         vm.expectRevert();
-        easyFarm.withdraw(0);
+        easyFarm.withdraw(0, 0);
         vm.stopPrank();
 
         vm.startPrank(john);
         vm.expectRevert();
-        easyFarm.withdraw(0);
+        easyFarm.withdraw(0, 0);
         vm.stopPrank();
     }
 
@@ -499,7 +574,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 hours);
@@ -522,7 +597,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 hours);
@@ -552,7 +627,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
         vm.stopPrank();
 
         assertEq(easyFarm.totalUSDValue(), 1101900250026577799403);
@@ -573,7 +648,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
         vm.stopPrank();
 
         _swapFromBob(false);
@@ -603,7 +678,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.startPrank(alice);
         token0.approve(address(easyFarm), 1e18);
         token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18);
+        easyFarm.deposit(1e18, 100e18, 0);
         vm.stopPrank();
 
         (uint256 amount0USD, uint256 amount1USD, uint256 totalUSD) = easyFarm

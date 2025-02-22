@@ -409,8 +409,12 @@ contract FarmlyEasyReader {
         view
         returns (Swap memory swap, uint256 amount0Add, uint256 amount1Add)
     {
-        (uint256 amountIn, uint256 amountOut, bool zeroForOne, ) = FarmlyZapV3
-            .getOptimalSwap(
+        (
+            uint256 amountIn,
+            uint256 amountOut,
+            bool zeroForOne,
+            uint160 sqrtPriceX96
+        ) = FarmlyZapV3.getOptimalSwap(
                 V3PoolCallee.wrap(
                     address(
                         IFarmlyUniV3Executor(address(farmlyEasyFarm.executor()))
@@ -434,6 +438,8 @@ contract FarmlyEasyReader {
         swap.amountIn = amountIn;
 
         swap.amountOut = amountOut;
+
+        swap.sqrtPriceX96 = sqrtPriceX96;
 
         amount0Add = zeroForOne
             ? _position.amount0Add - amountIn

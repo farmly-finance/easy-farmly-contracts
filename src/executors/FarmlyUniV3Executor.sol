@@ -291,19 +291,13 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
                 amount1
             );
 
-            (
-                Swap memory swap,
-                uint256 amount0Add,
-                uint256 amount1Add
-            ) = amountsForAdd(position);
+            (Swap memory swap, , ) = amountsForAdd(position);
 
             swapExactInput(swap);
 
-            (latestTokenId, , ) = mintPosition(
-                position,
-                amount0Add,
-                amount1Add
-            );
+            (amount0, amount1) = tokenBalances();
+
+            (latestTokenId, , ) = mintPosition(position, amount0, amount1);
         } else {
             (int24 tickLower, int24 tickUpper, ) = positionInfo();
 
@@ -322,7 +316,9 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
 
             swapExactInput(swap);
 
-            increasePosition(amount0Add, amount1Add);
+            (amount0, amount1) = tokenBalances();
+
+            increasePosition(amount0, amount1);
         }
     }
 
