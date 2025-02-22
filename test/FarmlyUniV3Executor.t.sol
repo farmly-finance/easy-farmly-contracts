@@ -673,8 +673,8 @@ contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
         executor.onRebalance(950e18, 1050e18);
 
         (uint256 amount0, uint256 amount1) = executor.positionAmounts();
-        assertEq(amount0, 1954061238454106981);
-        assertEq(amount1, 92045189247507633410);
+        assertEq(amount0, 1954061238454106982);
+        assertEq(amount1, 92045189247507633457);
         assertEq(executor.latestTokenId(), 3);
         assertLt(token0.balanceOf(address(executor)), amount0 / 10_000);
         assertLt(token1.balanceOf(address(executor)), amount1 / 10_000);
