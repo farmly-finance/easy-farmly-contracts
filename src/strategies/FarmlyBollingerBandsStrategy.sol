@@ -1,14 +1,12 @@
 pragma solidity ^0.8.13;
 
 import {FarmlyBaseStrategy} from "../base/FarmlyBaseStrategy.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
 
 contract FarmlyBollingerBandsStrategy is
     FarmlyBaseStrategy,
-    AutomationCompatibleInterface,
-    Ownable
+    AutomationCompatibleInterface
 {
     /// @notice Threshold denominator
     uint256 public constant THRESHOLD_DENOMINATOR = 100_000;
@@ -79,13 +77,13 @@ contract FarmlyBollingerBandsStrategy is
             THRESHOLD_DENOMINATOR
         );
 
-        bool upperRebalanceNeeded = (latestUpperPrice <
+        bool upperRebalanceNeeded = (_latestUpperPrice <
             _upperPrice - upperThreshold) ||
-            (latestUpperPrice > _upperPrice + upperThreshold);
+            (_latestUpperPrice > _upperPrice + upperThreshold);
 
-        bool lowerRebalanceNeeded = (latestLowerPrice <
+        bool lowerRebalanceNeeded = (_latestLowerPrice <
             _lowerPrice - lowerThreshold) ||
-            (latestLowerPrice > _lowerPrice + lowerThreshold);
+            (_latestLowerPrice > _lowerPrice + lowerThreshold);
 
         return upperRebalanceNeeded || lowerRebalanceNeeded;
     }
@@ -110,15 +108,15 @@ contract FarmlyBollingerBandsStrategy is
 
         _setLatestPrice();
 
-        prices.push(latestPrice);
+        prices.push(_latestPrice);
 
         if (prices.length >= MA) {
             updateBands();
 
             emit NewBands(
-                latestPrice,
-                latestLowerPrice,
-                latestUpperPrice,
+                _latestPrice,
+                _latestLowerPrice,
+                _latestUpperPrice,
                 latestMidPrice,
                 nextPeriodStartTimestamp
             );
@@ -136,8 +134,8 @@ contract FarmlyBollingerBandsStrategy is
             uint256 lowerBand
         ) = calculateBollingerBands();
 
-        latestUpperPrice = upperBand;
-        latestLowerPrice = lowerBand;
+        _latestUpperPrice = upperBand;
+        _latestLowerPrice = lowerBand;
         latestMidPrice = sma;
     }
 
@@ -188,21 +186,5 @@ contract FarmlyBollingerBandsStrategy is
     /// @notice Prices length
     function pricesLength() external view returns (uint256) {
         return prices.length;
-    }
-
-    function addMockPrices(uint256[] memory _prices) external onlyOwner {
-        for (uint256 i = 0; i < _prices.length; i++) {
-            prices.push(_prices[i]);
-
-            updateBands();
-
-            emit NewBands(
-                latestPrice,
-                latestLowerPrice,
-                latestUpperPrice,
-                latestMidPrice,
-                nextPeriodStartTimestamp
-            );
-        }
     }
 }
