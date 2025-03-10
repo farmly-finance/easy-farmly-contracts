@@ -43,34 +43,32 @@ contract FarmlyFixedWidthStrategyTest is Test {
     }
 
     function test_isRebalanceNeeded() public {
-        uint256 lowerPrice = 100;
-        uint256 upperPrice = 100;
+        uint256 price = 1000e18;
+        uint256 lowerPrice = (price * 9) / 10;
+        uint256 upperPrice = (price * 11) / 10;
+
+        token0PriceFeed.setPrice(int256((lowerPrice * 1e8) / 1e18));
         bool isRebalanceNeeded = strategy.isRebalanceNeeded(
             lowerPrice,
             upperPrice
         );
-
         assert(isRebalanceNeeded);
 
-        uint256 price = 995e18;
-        isRebalanceNeeded = strategy.isRebalanceNeeded(
-            (price * 9) / 10,
-            (price * 11) / 10
-        );
+        token0PriceFeed.setPrice(int256((upperPrice * 1e8) / 1e18));
+        isRebalanceNeeded = strategy.isRebalanceNeeded(lowerPrice, upperPrice);
         assert(isRebalanceNeeded);
 
-        price = 1000e18;
-        isRebalanceNeeded = strategy.isRebalanceNeeded(
-            (price * 9) / 10,
-            (price * 11) / 10
-        );
+        token0PriceFeed.setPrice(int256((lowerPrice * 1e8) / 1e18) - 1);
+        isRebalanceNeeded = strategy.isRebalanceNeeded(lowerPrice, upperPrice);
+        assert(isRebalanceNeeded);
+
+        token0PriceFeed.setPrice(int256((price * 1e8) / 1e18));
+        isRebalanceNeeded = strategy.isRebalanceNeeded(lowerPrice, upperPrice);
         assert(!isRebalanceNeeded);
 
-        price = 1005.5e18;
-        isRebalanceNeeded = strategy.isRebalanceNeeded(
-            (price * 9) / 10,
-            (price * 11) / 10
-        );
+        token0PriceFeed.setPrice(int256((upperPrice * 1e8) / 1e18) + 1);
+
+        isRebalanceNeeded = strategy.isRebalanceNeeded(lowerPrice, upperPrice);
         assert(isRebalanceNeeded);
     }
 }

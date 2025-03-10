@@ -35,26 +35,9 @@ contract FarmlyFixedWidthStrategy is FarmlyBaseStrategy {
         uint256 _lowerPrice,
         uint256 _upperPrice
     ) external view override returns (bool) {
-        uint256 upperThreshold = FarmlyFullMath.mulDiv(
-            _upperPrice,
-            THRESHOLD,
-            FarmlyDenominator.DENOMINATOR
-        );
-        uint256 lowerThreshold = FarmlyFullMath.mulDiv(
-            _lowerPrice,
-            THRESHOLD,
-            FarmlyDenominator.DENOMINATOR
-        );
+        uint256 price = latestPrice();
 
-        bool upperRebalanceNeeded = (latestUpperPrice() <
-            _upperPrice - upperThreshold) ||
-            (latestUpperPrice() > _upperPrice + upperThreshold);
-
-        bool lowerRebalanceNeeded = (latestLowerPrice() <
-            _lowerPrice - lowerThreshold) ||
-            (latestLowerPrice() > _lowerPrice + lowerThreshold);
-
-        return upperRebalanceNeeded || lowerRebalanceNeeded;
+        return (price >= _upperPrice) || (price <= _lowerPrice);
     }
 
     /// @notice Gets the latest price of token0 in terms of token1
