@@ -3,18 +3,16 @@ pragma solidity ^0.8.13;
 import {FarmlyBaseStrategy} from "../base/FarmlyBaseStrategy.sol";
 import {AutomationCompatibleInterface} from "chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
+import {FarmlyDenominator} from "../libraries/FarmlyDenominator.sol";
 
 contract FarmlyBollingerBandsStrategy is
     FarmlyBaseStrategy,
     AutomationCompatibleInterface
 {
-    /// @notice Threshold denominator
-    uint256 public constant THRESHOLD_DENOMINATOR = 100_000;
     /// @notice Not upkeep needed error
-
     error NotUpkeepNeeded();
-    /// @notice Moving average period
 
+    /// @notice Moving average period
     uint16 public MA;
     /// @notice Standard deviation multiplier
     uint16 public STD;
@@ -69,12 +67,12 @@ contract FarmlyBollingerBandsStrategy is
         uint256 upperThreshold = FarmlyFullMath.mulDiv(
             _upperPrice,
             rebalanceThreshold,
-            THRESHOLD_DENOMINATOR
+            FarmlyDenominator.DENOMINATOR
         );
         uint256 lowerThreshold = FarmlyFullMath.mulDiv(
             _lowerPrice,
             rebalanceThreshold,
-            THRESHOLD_DENOMINATOR
+            FarmlyDenominator.DENOMINATOR
         );
 
         bool upperRebalanceNeeded = (_latestUpperPrice <

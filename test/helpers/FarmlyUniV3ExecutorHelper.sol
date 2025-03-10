@@ -1,8 +1,10 @@
 pragma solidity ^0.8.13;
 
 import {FarmlyUniV3Executor} from "../../src/executors/FarmlyUniV3Executor.sol";
+import {Test} from "forge-std/Test.sol";
 
-contract FarmlyUniV3ExecutorHelper is FarmlyUniV3Executor {
+contract FarmlyUniV3ExecutorHelper is Test, FarmlyUniV3Executor {
+    address tom = makeAddr("Tom");
     constructor(
         address _factory,
         address _nonfungiblePositionManager,
@@ -108,5 +110,23 @@ contract FarmlyUniV3ExecutorHelper is FarmlyUniV3Executor {
             _tickLower,
             _tickUpper
         );
+    }
+
+    function exposed_feeParamaters()
+        external
+        view
+        returns (address feeAddress, uint256 performanceFee)
+    {
+        return feeParamaters();
+    }
+
+    function feeParamaters()
+        internal
+        view
+        override
+        returns (address feeAddress, uint256 performanceFee)
+    {
+        feeAddress = tom;
+        performanceFee = 20_000;
     }
 }

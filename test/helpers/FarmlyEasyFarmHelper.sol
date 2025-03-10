@@ -35,18 +35,4 @@ contract FarmlyEasyFarmHelper is FarmlyEasyFarm {
     {
         return tokensUSDValue(_amount0, _amount1);
     }
-
-    function exposed_mintPerformanceFee(
-        uint256 _amount0,
-        uint256 _amount1,
-        uint256 _totalSupplyBefore,
-        uint256 _totalUSDBefore
-    ) external {
-        _mintPerformanceFee(
-            _amount0,
-            _amount1,
-            _totalSupplyBefore,
-            _totalUSDBefore
-        );
-    }
 }

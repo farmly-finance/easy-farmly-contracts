@@ -2,6 +2,7 @@ pragma solidity ^0.8.13;
 
 import {FarmlyBaseStrategy} from "../base/FarmlyBaseStrategy.sol";
 import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
+import {FarmlyDenominator} from "../libraries/FarmlyDenominator.sol";
 
 /// @title FarmlyFixedWidthStrategy
 /// @notice Strategy that maintains a fixed price range around the current price
@@ -10,8 +11,6 @@ contract FarmlyFixedWidthStrategy is FarmlyBaseStrategy {
     uint256 public WIDTH;
     /// @notice Threshold for rebalancing as a percentage (denominated by DENOMINATOR)
     uint256 public THRESHOLD;
-    /// @notice Denominator for percentage calculations (100,000 = 100%)
-    uint256 public constant DENOMINATOR = 100_000;
 
     /// @notice Constructor
     /// @param _token0DataFeed Token0 price feed address
@@ -39,12 +38,12 @@ contract FarmlyFixedWidthStrategy is FarmlyBaseStrategy {
         uint256 upperThreshold = FarmlyFullMath.mulDiv(
             _upperPrice,
             THRESHOLD,
-            DENOMINATOR
+            FarmlyDenominator.DENOMINATOR
         );
         uint256 lowerThreshold = FarmlyFullMath.mulDiv(
             _lowerPrice,
             THRESHOLD,
-            DENOMINATOR
+            FarmlyDenominator.DENOMINATOR
         );
 
         bool upperRebalanceNeeded = (latestUpperPrice() <
@@ -70,8 +69,8 @@ contract FarmlyFixedWidthStrategy is FarmlyBaseStrategy {
         return
             FarmlyFullMath.mulDiv(
                 _token0PriceInToken1(),
-                DENOMINATOR - WIDTH,
-                DENOMINATOR
+                FarmlyDenominator.DENOMINATOR - WIDTH,
+                FarmlyDenominator.DENOMINATOR
             );
     }
 
@@ -81,8 +80,8 @@ contract FarmlyFixedWidthStrategy is FarmlyBaseStrategy {
         return
             FarmlyFullMath.mulDiv(
                 _token0PriceInToken1(),
-                DENOMINATOR + WIDTH,
-                DENOMINATOR
+                FarmlyDenominator.DENOMINATOR + WIDTH,
+                FarmlyDenominator.DENOMINATOR
             );
     }
 }

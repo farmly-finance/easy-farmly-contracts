@@ -12,10 +12,9 @@ import "../interfaces/IFarmlyUniV3Executor.sol";
 import {SqrtPriceX96} from "../libraries/SqrtPriceX96.sol";
 import {FarmlyZapV3, V3PoolCallee} from "../libraries/FarmlyZapV3.sol";
 import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
+import {FarmlyDenominator} from "../libraries/FarmlyDenominator.sol";
 
 contract FarmlyEasyReader {
-    uint256 public constant THRESHOLD_DENOMINATOR = 1e5;
-
     struct Position {
         int24 tickLower;
         int24 tickUpper;
@@ -262,13 +261,13 @@ contract FarmlyEasyReader {
         amount0Fee -= FarmlyFullMath.mulDiv(
             amount0Fee,
             farmlyEasyFarm.performanceFee(),
-            THRESHOLD_DENOMINATOR
+            FarmlyDenominator.DENOMINATOR
         );
 
         amount1Fee -= FarmlyFullMath.mulDiv(
             amount1Fee,
             farmlyEasyFarm.performanceFee(),
-            THRESHOLD_DENOMINATOR
+            FarmlyDenominator.DENOMINATOR
         );
     }
 

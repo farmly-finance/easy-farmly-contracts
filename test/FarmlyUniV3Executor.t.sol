@@ -6,6 +6,8 @@ import {console} from "forge-std/console.sol";
 import {FarmlyUniV3Executor} from "../src/executors/FarmlyUniV3Executor.sol";
 import {FarmlyUniV3ExecutorHelper} from "./helpers/FarmlyUniV3ExecutorHelper.sol";
 import {FarmlyTickLib} from "../src/libraries/FarmlyTickLib.sol";
+import {FarmlyDenominator} from "../src/libraries/FarmlyDenominator.sol";
+import {FarmlyFullMath} from "../src/libraries/FarmlyFullMath.sol";
 import {UniswapV3Fixture} from "./fixtures/UniswapV3Fixture.sol";
 
 contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
@@ -44,6 +46,13 @@ contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
         assertEq(token0, address(token0));
         assertEq(token1, address(token1));
         assertEq(poolFee, 500);
+    }
+
+    function test_feeParamaters() public {
+        (address feeAddress, uint256 performanceFee) = executor
+            .exposed_feeParamaters();
+        assertEq(feeAddress, makeAddr("Tom"));
+        assertEq(performanceFee, 20_000);
     }
 
     function test_nearestRange() public {
@@ -372,14 +381,33 @@ contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
         _swapFromBob(true);
 
         (uint256 amount0, uint256 amount1) = executor.exposed_collectFees();
-        assertEq(amount0, 456470799282880);
+
+        uint256 feeAmount = 456470799282880;
+
+        (, uint256 performanceFee) = executor.exposed_feeParamaters();
+
+        assertEq(
+            amount0,
+            FarmlyFullMath.mulDiv(
+                FarmlyDenominator.DENOMINATOR - performanceFee,
+                feeAmount,
+                FarmlyDenominator.DENOMINATOR
+            )
+        );
         assertEq(amount1, 0);
 
         _swapFromBob(false);
 
         (amount0, amount1) = executor.exposed_collectFees();
         assertEq(amount0, 0);
-        assertEq(amount1, 456470799282880);
+        assertEq(
+            amount1,
+            FarmlyFullMath.mulDiv(
+                FarmlyDenominator.DENOMINATOR - performanceFee,
+                feeAmount,
+                FarmlyDenominator.DENOMINATOR
+            )
+        );
     }
 
     function test_burnPositionToken_withoutMint() public {
@@ -673,8 +701,8 @@ contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
         executor.onRebalance(950e18, 1050e18);
 
         (uint256 amount0, uint256 amount1) = executor.positionAmounts();
-        assertEq(amount0, 1954061238454106982);
-        assertEq(amount1, 92045189247507633457);
+        assertEq(amount0, 1953970139778821952);
+        assertEq(amount1, 92045002550752621951);
         assertEq(executor.latestTokenId(), 3);
         assertLt(token0.balanceOf(address(executor)), amount0 / 10_000);
         assertLt(token1.balanceOf(address(executor)), amount1 / 10_000);
@@ -762,8 +790,20 @@ contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
             900e18,
             1100e18
         );
+
+        uint256 feeAmount = 456470799282880;
+
+        (, uint256 performanceFee) = executor.exposed_feeParamaters();
+
         assertEq(executor.latestTokenId(), 2);
-        assertEq(amount0Collected, 456470799282880);
+        assertEq(
+            amount0Collected,
+            FarmlyFullMath.mulDiv(
+                FarmlyDenominator.DENOMINATOR - performanceFee,
+                feeAmount,
+                FarmlyDenominator.DENOMINATOR
+            )
+        );
         assertEq(amount1Collected, 0);
     }
 
@@ -819,10 +859,21 @@ contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
 
         (amount0, amount1) = executor.positionAmounts();
 
+        uint256 feeAmount = 456470799282880;
+
+        (, uint256 performanceFee) = executor.exposed_feeParamaters();
+
         assertEq(executor.latestTokenId(), 2);
-        assertEq(amount0, 1908691230425416280);
-        assertEq(amount1, 134415115353098754797);
-        assertEq(amount0Collected, 456470799282880);
+        assertEq(amount0, 1908600508735579009);
+        assertEq(amount1, 134414595834511106881);
+        assertEq(
+            amount0Collected,
+            FarmlyFullMath.mulDiv(
+                FarmlyDenominator.DENOMINATOR - performanceFee,
+                feeAmount,
+                FarmlyDenominator.DENOMINATOR
+            )
+        );
         assertEq(amount1Collected, 0);
     }
 
@@ -898,11 +949,22 @@ contract FarmlyUniV3ExecutorTest is Test, UniswapV3Fixture {
             uint256 amount1
         ) = executor.onWithdraw(100e18, bob);
 
-        assertEq(amount0Collected, 456470799282880);
+        uint256 feeAmount = 456470799282880;
+
+        (, uint256 performanceFee) = executor.exposed_feeParamaters();
+
+        assertEq(
+            amount0Collected,
+            FarmlyFullMath.mulDiv(
+                FarmlyDenominator.DENOMINATOR - performanceFee,
+                feeAmount,
+                FarmlyDenominator.DENOMINATOR
+            )
+        );
         assertEq(amount1Collected, 0);
         assertEq(token0.balanceOf(bob), bobBalance0After + amount0);
         assertEq(token1.balanceOf(bob), bobBalance1After + amount1);
-        assertEq(token0.balanceOf(bob), 1908691245357618704);
-        assertEq(token1.balanceOf(bob), 1087184977576663259351);
+        assertEq(token0.balanceOf(bob), 1908600520681822125);
+        assertEq(token1.balanceOf(bob), 1087184458058075611435);
     }
 }
