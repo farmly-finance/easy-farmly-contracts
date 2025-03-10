@@ -17,6 +17,7 @@ import {FarmlyZapV3, V3PoolCallee} from "../libraries/FarmlyZapV3.sol";
 import {FarmlyTickLib} from "../libraries/FarmlyTickLib.sol";
 import {FarmlyTransferHelper} from "../libraries/FarmlyTransferHelper.sol";
 import {FarmlyFullMath} from "../libraries/FarmlyFullMath.sol";
+import {FarmlyDenominator} from "../libraries/FarmlyDenominator.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 contract FarmlyUniV3Executor is FarmlyBaseExecutor {
@@ -398,7 +399,14 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
                 })
             );
 
-            (amount0, amount1) = collectFees();
+            (amount0, amount1) = nonfungiblePositionManager.collect(
+                INonfungiblePositionManager.CollectParams({
+                    tokenId: latestTokenId,
+                    recipient: address(this),
+                    amount0Max: type(uint128).max,
+                    amount1Max: type(uint128).max
+                })
+            );
         }
     }
 
@@ -504,6 +512,39 @@ contract FarmlyUniV3Executor is FarmlyBaseExecutor {
                     amount1Max: type(uint128).max
                 })
             );
+
+            (address feeAddress, uint256 performanceFee) = feeParamaters();
+
+            if (performanceFee > 0) {
+                uint256 feeAmount0 = FarmlyFullMath.mulDiv(
+                    amount0,
+                    performanceFee,
+                    FarmlyDenominator.DENOMINATOR
+                );
+
+                uint256 feeAmount1 = FarmlyFullMath.mulDiv(
+                    amount1,
+                    performanceFee,
+                    FarmlyDenominator.DENOMINATOR
+                );
+
+                if (feeAmount0 > 0)
+                    FarmlyTransferHelper.safeTransfer(
+                        token0,
+                        feeAddress,
+                        feeAmount0
+                    );
+
+                if (feeAmount1 > 0)
+                    FarmlyTransferHelper.safeTransfer(
+                        token1,
+                        feeAddress,
+                        feeAmount1
+                    );
+
+                amount0 -= feeAmount0;
+                amount1 -= feeAmount1;
+            }
         }
     }
 

@@ -14,6 +14,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
     address alice = makeAddr("Alice");
     address bob = makeAddr("Bob");
     address john = makeAddr("John");
+    address tom = makeAddr("Tom");
     FarmlyBollingerBandsStrategy strategy;
     FarmlyUniV3Executor executor;
     FarmlyEasyFarmHelper easyFarm;
@@ -70,7 +71,7 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         executor.transferOwnership(address(easyFarm));
 
         easyFarm.setPerformanceFee(20_000);
-        easyFarm.setFeeAddress(bob);
+        easyFarm.setFeeAddress(tom);
         easyFarm.setMaximumCapacity(10_000e18);
         easyFarm.setMinimumDepositUSD(5e18);
 
@@ -78,6 +79,8 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         deal(address(token1), alice, 0);
         deal(address(token0), bob, 0);
         deal(address(token1), bob, 0);
+        deal(address(token0), tom, 0);
+        deal(address(token1), tom, 0);
     }
 
     function test_constructor() public {
@@ -175,111 +178,6 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.stopPrank();
     }
 
-    function test_mintPerformanceFee_zeroAmount_noMint() public {
-        easyFarm.exposed_mintPerformanceFee(0, 0, 0, 0);
-
-        assertEq(easyFarm.totalSupply(), 0);
-        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 0);
-    }
-
-    function test_mintPerformanceFee_zeroSupplyToken0_mint() public {
-        easyFarm.exposed_mintPerformanceFee(0.1e18, 0, 0, 0);
-
-        assertEq(easyFarm.totalSupply(), 20.038e18);
-        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 20.038e18);
-    }
-
-    function test_mintPerformanceFee_zeroSupplyToken1_mint() public {
-        easyFarm.exposed_mintPerformanceFee(0, 100e18, 0, 0);
-
-        assertEq(easyFarm.totalSupply(), 20e18);
-        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 20e18);
-    }
-
-    function test_mintPerformanceFee_zeroSupplyBoth_mint() public {
-        easyFarm.exposed_mintPerformanceFee(0.1e18, 100e18, 0, 0);
-
-        assertEq(easyFarm.totalSupply(), 40.038e18);
-        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 40.038e18);
-    }
-
-    function test_mintPerformanceFee_token0_mint() public {
-        token1.mint(alice, 100e18);
-        vm.startPrank(alice);
-        token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(0, 100e18, 0);
-        vm.stopPrank();
-
-        uint256 totalSupplyBefore = easyFarm.totalSupply();
-
-        easyFarm.exposed_mintPerformanceFee(
-            0.1e18,
-            0,
-            totalSupplyBefore,
-            easyFarm.totalUSDValue()
-        );
-
-        uint256 totalSupplyAfter = easyFarm.totalSupply();
-
-        assertEq(totalSupplyAfter, 120037800715936136190);
-        assertEq(
-            easyFarm.balanceOf(easyFarm.feeAddress()),
-            totalSupplyAfter - totalSupplyBefore
-        );
-    }
-
-    function test_mintPerformanceFee_token1_mint() public {
-        token0.mint(alice, 1e18);
-        vm.startPrank(alice);
-        token0.approve(address(easyFarm), 1e18);
-        easyFarm.deposit(1e18, 0, 0);
-        vm.stopPrank();
-
-        uint256 totalSupplyBefore = easyFarm.totalSupply();
-
-        easyFarm.exposed_mintPerformanceFee(
-            0.1e18,
-            0,
-            totalSupplyBefore,
-            easyFarm.totalUSDValue()
-        );
-
-        uint256 totalSupplyAfter = easyFarm.totalSupply();
-
-        assertEq(totalSupplyAfter, 1021938000000000000020);
-        assertEq(
-            easyFarm.balanceOf(easyFarm.feeAddress()),
-            totalSupplyAfter - totalSupplyBefore
-        );
-    }
-
-    function test_mintPerformanceFee_both_mint() public {
-        token0.mint(alice, 1e18);
-        token1.mint(alice, 100e18);
-        vm.startPrank(alice);
-        token0.approve(address(easyFarm), 1e18);
-        token1.approve(address(easyFarm), 100e18);
-        easyFarm.deposit(1e18, 100e18, 0);
-        vm.stopPrank();
-
-        uint256 totalSupplyBefore = easyFarm.totalSupply();
-
-        easyFarm.exposed_mintPerformanceFee(
-            0.1e18,
-            100e18,
-            totalSupplyBefore,
-            easyFarm.totalUSDValue()
-        );
-
-        uint256 totalSupplyAfter = easyFarm.totalSupply();
-
-        assertEq(totalSupplyAfter, 1141937990915181186599);
-        assertEq(
-            easyFarm.balanceOf(easyFarm.feeAddress()),
-            totalSupplyAfter - totalSupplyBefore
-        );
-    }
-
     function test_tokensUSDValue() public {
         (uint256 token0USD, uint256 token1USD, uint256 totalUSD) = easyFarm
             .exposed_tokensUSDValue(1e18, 100e18);
@@ -364,15 +262,14 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.stopPrank();
 
         assertEq(easyFarm.balanceOf(alice), 1101910972251178612918);
-        assertEq(easyFarm.balanceOf(john), 1101920757022600019610);
-        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 33289912716463267);
-        assertEq(easyFarm.totalSupply(), 2203865019186495095795);
-        assertEq(easyFarm.totalUSDValue(), 2203777613617343486022);
+        assertEq(easyFarm.balanceOf(john), 1101920757217967040442);
+        assertEq(token0.balanceOf(easyFarm.feeAddress()), 13296578323880);
+        assertEq(token1.balanceOf(easyFarm.feeAddress()), 19968377612325954);
+        assertEq(easyFarm.totalSupply(), 2203831729469145653360);
+        assertEq(easyFarm.totalUSDValue(), 2203744323367364237409);
         assertEq(
             easyFarm.totalSupply(),
-            easyFarm.balanceOf(john) +
-                easyFarm.balanceOf(alice) +
-                easyFarm.balanceOf(easyFarm.feeAddress())
+            easyFarm.balanceOf(john) + easyFarm.balanceOf(alice)
         );
     }
 
@@ -457,17 +354,17 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         vm.stopPrank();
 
         assertEq(easyFarm.balanceOf(alice), 0);
-        assertEq(token0.balanceOf(alice), 1000213750691698236);
-        assertEq(token1.balanceOf(alice), 99886269144365036707);
+        assertEq(token0.balanceOf(alice), 1000203747221927155);
+        assertEq(token1.balanceOf(alice), 99876279258030804026);
         assertEq(easyFarm.balanceOf(john), 0);
-        assertEq(token0.balanceOf(john), 1000177204667026134);
-        assertEq(token1.balanceOf(john), 99882578623637822709);
-        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 40012885071072485);
+        assertEq(token0.balanceOf(john), 1000203520270785240);
+        assertEq(token1.balanceOf(john), 99876223910001659752);
+        assertEq(token0.balanceOf(easyFarm.feeAddress()), 19992428554055);
+        assertEq(token1.balanceOf(easyFarm.feeAddress()), 19986116889865974);
         assertEq(
             easyFarm.totalSupply(),
             easyFarm.balanceOf(easyFarm.feeAddress())
         );
-        assertEq(easyFarm.totalUSDValue(), 40015077265156601);
     }
 
     function test_withdraw_slippageNotExceeded() public {
@@ -612,9 +509,10 @@ contract FarmlyEasyFarmTest is Test, UniswapV3Fixture {
         assertEq(easyFarm.latestLowerPrice(), 994912579011074907525);
         assertEq(easyFarm.latestUpperPrice(), 1008938606943460321466);
         assertEq(easyFarm.latestTimestamp(), 121 hours);
-        assertEq(easyFarm.totalSupply(), 1101910004136749194150);
-        assertEq(easyFarm.totalUSDValue(), 1118641702587282900748);
-        assertEq(easyFarm.balanceOf(easyFarm.feeAddress()), 10004136749194150);
+        assertEq(easyFarm.totalSupply(), 1101900000000000000000);
+        assertEq(easyFarm.totalUSDValue(), 1118631546452818762559);
+        assertEq(token0.balanceOf(easyFarm.feeAddress()), 9987348278236);
+        assertEq(token1.balanceOf(easyFarm.feeAddress()), 0);
     }
 
     function test_totalUSDValue_withoutDeposits() public {

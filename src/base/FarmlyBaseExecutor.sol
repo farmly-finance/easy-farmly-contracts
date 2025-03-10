@@ -1,6 +1,7 @@
 pragma solidity ^0.8.13;
 
 import {IFarmlyBaseExecutor} from "../interfaces/base/IFarmlyBaseExecutor.sol";
+import {IFarmlyEasyFarm} from "../interfaces/IFarmlyEasyFarm.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor, Ownable {
@@ -81,5 +82,16 @@ abstract contract FarmlyBaseExecutor is IFarmlyBaseExecutor, Ownable {
         )
     {
         revert NotImplemented();
+    }
+
+    /// Function to get fee parameters
+    function feeParamaters()
+        internal
+        view
+        virtual
+        returns (address feeAddress, uint256 performanceFee)
+    {
+        feeAddress = IFarmlyEasyFarm(owner()).feeAddress();
+        performanceFee = IFarmlyEasyFarm(owner()).performanceFee();
     }
 }

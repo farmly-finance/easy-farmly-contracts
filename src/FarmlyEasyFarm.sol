@@ -37,8 +37,6 @@ contract FarmlyEasyFarm is
 
     /// @notice Price base
     uint256 public constant PRICE_BASE = 10 ** 18;
-    /// @notice Performance fee denominator
-    uint256 public constant PERFORMANCE_FEE_DENOMINATOR = 100_000;
     /// @inheritdoc IFarmlyEasyFarm
     IFarmlyBaseStrategy public override strategy;
     /// @inheritdoc IFarmlyEasyFarm
@@ -136,13 +134,6 @@ contract FarmlyEasyFarm is
         (uint256 amount0Collected, uint256 amount1Collected) = executor
             .onRebalance(latestLowerPrice, latestUpperPrice);
 
-        _mintPerformanceFee(
-            amount0Collected,
-            amount1Collected,
-            totalSupply(),
-            usdValueBefore
-        );
-
         emit PerformPosition(
             latestLowerPrice,
             latestUpperPrice,
@@ -200,12 +191,6 @@ contract FarmlyEasyFarm is
         if (shareAmount < _minShareAmount) revert SlippageExceeded();
 
         _mint(msg.sender, shareAmount);
-        _mintPerformanceFee(
-            amount0Collected,
-            amount1Collected,
-            totalSupplyBefore,
-            totalUSDBefore
-        );
 
         emit Deposit(_amount0, _amount1, shareAmount, userDepositUSD);
     }
@@ -227,13 +212,6 @@ contract FarmlyEasyFarm is
                 FarmlyFullMath.mulDiv(_amount, 100e18, totalSupplyBefore),
                 msg.sender
             );
-
-        _mintPerformanceFee(
-            amount0Collected,
-            amount1Collected,
-            totalSupplyBefore,
-            totalUSDBefore
-        );
 
         (, , uint256 withdrawUSD) = tokensUSDValue(amount0, amount1);
 
@@ -294,32 +272,6 @@ contract FarmlyEasyFarm is
         );
 
         totalUSD = token0USD + token1USD;
-    }
-
-    function _mintPerformanceFee(
-        uint256 _amount0,
-        uint256 _amount1,
-        uint256 _totalSupplyBefore,
-        uint256 _totalUSDBefore
-    ) internal {
-        if (_amount0 == 0 && _amount1 == 0) return;
-        (, , uint256 totalUSD) = tokensUSDValue(_amount0, _amount1);
-
-        uint256 performanceFeeUSD = FarmlyFullMath.mulDiv(
-            totalUSD,
-            performanceFee,
-            PERFORMANCE_FEE_DENOMINATOR
-        );
-
-        uint256 shareAmount = _totalSupplyBefore == 0
-            ? performanceFeeUSD
-            : FarmlyFullMath.mulDiv(
-                performanceFeeUSD,
-                _totalSupplyBefore,
-                _totalUSDBefore
-            );
-
-        if (shareAmount > 0) _mint(feeAddress, shareAmount);
     }
 
     /// @inheritdoc IFarmlyEasyFarm
